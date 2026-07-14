@@ -1,4 +1,6 @@
-# [logo](icon.png?raw=true) Cyber Increment
+# Cyber Increment
+
+![logo](icon.png)
 
 Jeu **incrémental** sur fond **cyber / hacker solo**, développé avec **Godot 4.4.1** (desktop Windows).
 La particularité : on ne se contente pas de cliquer, on **tape des commandes de hack au clavier** — la
