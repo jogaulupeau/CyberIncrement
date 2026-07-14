@@ -29,6 +29,11 @@ const OP_SUCCESS_CHANCE := 0.70        # proba de réussite (0..1)
 const OP_REWARD_SECONDS := 30.0        # réussite = X secondes de production
 const OP_MIN_REWARD_CLICKS := 25.0     # plancher de gain (en clics) pour le début de partie
 const TRACE_MAX := 100.0
+# Couleurs des EFFETS (flashs d'écran + textes flottants), palette DOS.
+const FX_GAIN := Color(0.2, 0.9, 0.3)      # vert : gain / succès
+const FX_ALERT := Color(0.9, 0.12, 0.12)   # rouge : danger / échec
+const FX_SPECIAL := Color(1, 0.8, 0.2)     # ambre : faille, boost, éveil
+const FX_EVENT := Color(0.95, 0.45, 0.1)   # orange : événement aléatoire
 const TRACE_PER_FAIL := 40.0           # 3 échecs enchaînés (même espacés du cooldown) => TRACÉ
 const TRACE_DECAY := 0.5               # décroissance lente : les échecs "collent" entre les opérations
 const MALUS_MULT := 0.25               # "TRACÉ" : production ×0.25 (soit ÷4)
@@ -157,7 +162,6 @@ var zeroday_buff_remaining: float = 0.0 # temps restant du buff faille
 var zeroday_window_remaining: float = 0.0 # temps restant pour cliquer une faille visible
 var zeroday_spawn_timer: float = 0.0   # compte à rebours avant la prochaine faille
 var _pop_tween: Tween = null           # animation de "pop" en cours sur le compteur
-var _toast_id: int = 0                 # jeton pour éviter qu'un ancien toast masque un récent
 var term_lines: Array[String] = []     # tampon des lignes affichées dans le terminal
 
 # Mini-jeu de frappe (taper les commandes de hack).
@@ -329,7 +333,11 @@ const NET_MAX_ZOOM := 2.5
 @onready var fragment_label: Label = %FragmentLabel
 @onready var prestige_info: Label = %PrestigeInfo
 @onready var prestige_button: Button = %PrestigeButton
-@onready var prestige_confirm: ConfirmationDialog = %PrestigeConfirm
+@onready var confirm_overlay: Control = %ConfirmOverlay
+@onready var confirm_title: Label = %ConfirmTitle
+@onready var confirm_msg: RichTextLabel = %ConfirmMsg
+@onready var confirm_ok: Button = %ConfirmOK
+@onready var confirm_cancel: Button = %ConfirmCancel
 @onready var shop_container: VBoxContainer = %ShopContainer
 @onready var daemons_bar: HBoxContainer = %DaemonsBar
 @onready var daemon_container: VBoxContainer = %DaemonContainer
@@ -341,16 +349,16 @@ const NET_MAX_ZOOM := 2.5
 @onready var daemons_panel: PanelContainer = %DaemonsPanel
 @onready var cooldown_bar: ProgressBar = %CooldownBar
 @onready var trace_label: Label = %TraceLabel
-@onready var trace_bar: ProgressBar = %TraceBar
+@onready var trace_bar: Panel = %TraceBar
+@onready var trace_ticks: HBoxContainer = %Ticks
+@onready var trace_pct: Label = %Pct
 @onready var zeroday_button: Button = %ZeroDayButton
 @onready var event_status: Label = %EventStatus
 @onready var boss_panel: PanelContainer = %BossPanel
 @onready var boss_title: Label = %BossTitle
 @onready var boss_hp_bar: ProgressBar = %BossHPBar
 @onready var boss_info: Label = %BossInfo
-@onready var toast: PanelContainer = %Toast
-@onready var toast_title: Label = %ToastTitle
-@onready var toast_msg: Label = %ToastMsg
+@onready var toast_stack: VBoxContainer = %ToastStack
 @onready var objective_label: Label = %ObjectiveLabel
 @onready var victory_overlay: Control = %VictoryOverlay
 @onready var victory_panel: PanelContainer = %VictoryPanel
@@ -367,15 +375,16 @@ const NET_MAX_ZOOM := 2.5
 @onready var busted_malus: Label = %BustedMalus
 @onready var mute_button: Button = %MuteButton
 @onready var volume_slider: HSlider = %VolumeSlider
-@onready var help_button: Button = %HelpButton
+@onready var help_button: RichTextLabel = %HelpButton
 @onready var help_overlay: Control = %HelpOverlay
 @onready var help_topics_bar: HFlowContainer = %HelpTopics
 @onready var help_text: RichTextLabel = %HelpText
 @onready var help_close_button: Button = %CloseButton
-@onready var save_button: Button = %SaveButton
-@onready var reset_button: Button = %ResetButton
+@onready var save_button: RichTextLabel = %SaveButton
+@onready var reset_button: RichTextLabel = %ResetButton
 @onready var about_label: Label = %AboutLabel
 @onready var status_label: Label = %StatusLabel
+@onready var clock_label: Label = %ClockLabel
 
 
 func _ready() -> void:
@@ -385,7 +394,10 @@ func _ready() -> void:
 	busted_overlay.gui_input.connect(_on_busted_input)
 	network_view.gui_input.connect(_on_network_gui_input)
 	continue_button.pressed.connect(_on_continue_pressed)
-	help_button.pressed.connect(_open_help)
+	# Items de menu façon FreeDOS (RichTextLabel cliquables, lettre-raccourci rouge).
+	_setup_menu_item(help_button, "[color=#aa0000]A[/color]ide", "[color=#ffffff]Aide[/color]", _open_help)
+	_setup_menu_item(save_button, "[color=#aa0000]S[/color]auver", "[color=#ffffff]Sauver[/color]", _on_save_pressed)
+	_setup_menu_item(reset_button, "[color=#aa0000]R[/color]éinitialiser", "[color=#ffffff]Réinitialiser[/color]", _on_reset_pressed)
 	help_close_button.pressed.connect(_close_help)
 	mute_button.pressed.connect(_on_mute_pressed)
 	_build_help_topics()
@@ -393,17 +405,16 @@ func _ready() -> void:
 	tabs.set_tab_title(1, "Augmentations")
 	tabs.set_tab_title(2, "Programmes")
 	tabs.set_tab_title(3, "Réseau")
-	save_button.pressed.connect(_on_save_pressed)
-	reset_button.pressed.connect(_on_reset_pressed)
 	about_label.text = "v%s · © %s %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR]
 	about_label.tooltip_text = "Cyber Increment v%s\n© %s %s\nLicence : %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE]
 	prestige_button.pressed.connect(_on_prestige_pressed)
-	prestige_confirm.confirmed.connect(_do_prestige)
+	confirm_ok.pressed.connect(_on_confirm_ok)
+	confirm_cancel.pressed.connect(_on_confirm_cancel)
 	op_button.pressed.connect(_on_operation_pressed)
 	zeroday_button.pressed.connect(_on_zeroday_pressed)
 
 	cooldown_bar.max_value = OP_COOLDOWN
-	trace_bar.max_value = TRACE_MAX
+	_build_trace_ticks()
 	logo_icon.texture = load("res://assets/icons/ai-logo.svg")
 	fragment_icon.texture = load("res://assets/icons/fragment.svg")
 	zeroday_button.visible = false
@@ -441,7 +452,7 @@ func _build_generator_rows() -> void:
 		var row := GeneratorRowScene.instantiate() as GeneratorRow
 		gen_container.add_child(row)
 		row.setup(i)
-		row.set_icon(load(gen.icon) as Texture2D, Color(0, 0.9, 0.82))  # cyan
+		row.set_icon(load(gen.icon) as Texture2D, Color(0, 0, 0.5))  # bleu DOS
 		row.buy_requested.connect(_on_gen_buy)
 		gen_rows.append(row)
 
@@ -457,13 +468,13 @@ func _build_item_rows() -> void:
 		item_rows.append(row)
 
 
-# Couleur néon associée à chaque catégorie d'item.
+# Couleur DOS associée à chaque catégorie d'item (teinte d'icône sur fond gris clair).
 func _category_color(category: String) -> Color:
 	match category:
-		"PUISSANCE":  return Color(0, 0.9, 0.82)      # cyan
-		"EFFICACITE": return Color(0.4, 1.0, 0.6)     # vert
-		"VARIETE":    return Color(1, 0.16, 0.62)     # magenta
-	return Color(1, 1, 1)
+		"PUISSANCE":  return Color(0, 0, 0.5)         # bleu
+		"EFFICACITE": return Color(0, 0.4, 0)         # vert
+		"VARIETE":    return Color(0.541, 0, 0.541)   # magenta
+	return Color(0, 0, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -487,7 +498,7 @@ func _unlock_feature(feature: String, announce_name: String, help: String) -> vo
 	unlocked[feature] = true
 	_apply_gating()
 	_play_sfx("unlock")
-	_show_toast("DÉBLOQUÉ : %s" % announce_name, help, Color(0, 0.9, 0.82), 4.0)
+	_show_toast("DÉBLOQUÉ : %s" % announce_name, help, TOAST_SYS, 4.0)
 
 
 # Entrées "mystère" de la boutique (en haut de l'onglet Augmentations).
@@ -545,6 +556,88 @@ func _build_help_topics() -> void:
 		btn.pressed.connect(_show_help_topic.bind(i))
 		help_topics_bar.add_child(btn)
 		help_buttons.append(btn)
+
+
+const TRACE_TICKS := 48                 # nombre de barres verticales de la jauge de traçage
+
+# Crée les barres verticales de la jauge de traçage (style barre de progression FreeDOS).
+func _build_trace_ticks() -> void:
+	for i in TRACE_TICKS:
+		var tick := ColorRect.new()
+		tick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tick.color = Color(0.6, 0.6, 0.6)   # gris "vide" par défaut
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		trace_ticks.add_child(tick)
+
+
+# Met à jour la jauge de traçage : remplissage + couleur selon le palier de menace.
+func _update_trace_bar() -> void:
+	var pct := clampf(trace / TRACE_MAX, 0.0, 1.0)
+	var filled := int(round(pct * TRACE_TICKS))
+	# Couleur selon la gravité : rouge (calme) -> orange (repéré) -> rouge vif clignotant (critique).
+	var fill_col := Color(0.667, 0, 0)
+	var state := "calme"
+	if trace >= 85.0:
+		state = "INTRUSION IMMINENTE"
+		# Clignotement ~2/s en zone critique.
+		var on := int(Time.get_ticks_msec() / 260) % 2 == 0
+		fill_col = Color(0.88, 0, 0) if on else Color(0.45, 0, 0)
+	elif trace >= 60.0:
+		state = "repéré"
+		fill_col = Color(0.8, 0.33, 0)
+	var ticks := trace_ticks.get_children()
+	for i in ticks.size():
+		(ticks[i] as ColorRect).color = fill_col if i < filled else Color(0.6, 0.6, 0.6)
+	trace_pct.text = "%d %%" % int(trace)
+	trace_label.text = "TRAÇAGE — %s" % state
+
+
+# Configure un item de menu FreeDOS : lettre-raccourci rouge au repos, tout blanc
+# au survol, action au clic gauche. (RichTextLabel car un Button ne colore pas une lettre.)
+func _setup_menu_item(item: RichTextLabel, base_bb: String, hover_bb: String, action: Callable) -> void:
+	item.text = base_bb
+	item.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			action.call())
+	item.mouse_entered.connect(func() -> void: item.text = hover_bb)
+	item.mouse_exited.connect(func() -> void: item.text = base_bb)
+
+
+# ---------------------------------------------------------------------------
+# MODAL DE CONFIRMATION (style newt : voile bleu + boîte claire à ombre dure)
+# ---------------------------------------------------------------------------
+
+var _confirm_action := Callable()       # action à exécuter si l'utilisateur confirme
+
+# Affiche le modal. title/message (message en BBCode), texte du bouton OK.
+# danger=true : action destructive -> focus par défaut sur Annuler, OK en rouge.
+func _show_confirm(title: String, message_bb: String, ok_text: String, danger: bool, action: Callable) -> void:
+	confirm_title.text = title
+	confirm_msg.text = message_bb
+	confirm_ok.text = ok_text
+	confirm_ok.add_theme_color_override("font_color", Color(0.667, 0, 0) if danger else Color(0, 0, 0))
+	_confirm_action = action
+	confirm_overlay.visible = true
+	confirm_overlay.modulate.a = 0.0
+	create_tween().tween_property(confirm_overlay, "modulate:a", 1.0, 0.12)
+	# Action destructive : le focus par défaut est sur Annuler (pas de destruction au réflexe).
+	if danger:
+		confirm_cancel.grab_focus()
+	else:
+		confirm_ok.grab_focus()
+
+
+func _on_confirm_ok() -> void:
+	confirm_overlay.visible = false
+	var action := _confirm_action
+	_confirm_action = Callable()
+	if action.is_valid():
+		action.call()
+
+
+func _on_confirm_cancel() -> void:
+	confirm_overlay.visible = false
+	_confirm_action = Callable()
 
 
 func _open_help() -> void:
@@ -682,7 +775,7 @@ func _activate_daemon(index: int) -> void:
 		if intrusion_active:
 			_escape_intrusion()
 		_set_status("GHOST : traçage effacé (-%d Fragment)." % use_cost)
-		_flash(Color(0, 0.9, 0.82), 0.25)
+		_flash(FX_GAIN, 0.25)
 		_update_display()
 		return
 
@@ -699,7 +792,7 @@ func _activate_daemon(index: int) -> void:
 		"overclock":
 			d.active_remaining = _daemon_duration(d)
 			_set_status("OVERCLOCK : production x%d !" % int(OVERCLOCK_MULT))
-	_flash(Color(0, 0.9, 0.82), 0.25)
+	_flash(FX_SPECIAL, 0.25)
 	_update_display()
 
 
@@ -733,7 +826,7 @@ func _build_daemon_rows() -> void:
 		var row := ItemRowScene.instantiate() as ItemRow
 		daemon_container.add_child(row)
 		row.setup(i)
-		row.set_icon(load(d.icon) as Texture2D, Color(0.4, 0.8, 1.0))  # bleu "programme"
+		row.set_icon(load(d.icon) as Texture2D, Color(0, 0, 0.5))  # bleu DOS "programme"
 		row.buy_requested.connect(_on_daemon_buy)
 		# GHOST (usage payant) ne se débloque pas : pas de ligne dans l'onglet Programmes.
 		row.visible = not d.get("pay_per_use", false)
@@ -1006,7 +1099,19 @@ func _on_terminal_input(event: InputEvent) -> void:
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
-	if prestige_confirm.visible or busted_overlay.visible or victory_overlay.visible or help_overlay.visible:
+	# Raccourcis "touches de fonction" façon DOS (annoncés dans la barre de statut).
+	if event.keycode == KEY_F1:
+		if help_overlay.visible:
+			_close_help()
+		else:
+			_open_help()
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_F5:
+		_on_save_pressed()
+		get_viewport().set_input_as_handled()
+		return
+	if confirm_overlay.visible or busted_overlay.visible or victory_overlay.visible or help_overlay.visible:
 		return                              # clavier en pause pendant confirmation / écrans pleins
 	var u: int = event.unicode
 	if u < 32:                              # on ignore les touches non imprimables (Entrée, Tab...)
@@ -1070,14 +1175,9 @@ func _complete_command() -> void:
 	_earn(bonus)
 	combo_timer = 0.0
 
-	var tag := "[color=#ffcf40][RARE] [/color]" if rare else ""
-	var line := "[color=#7fd8d0]%sexec: %s[/color]  [color=#5dffa0]+%d o[/color]" % [tag, current_command, int(bonus)]
-	term_lines.append(line)
-	if term_lines.size() > 40:
-		term_lines.pop_front()
-	terminal_log.text = "\n".join(PackedStringArray(term_lines))
+	_term_log(current_command, int(bonus), rare)
 
-	var col := Color(1, 0.81, 0.25) if rare else Color(0.4, 1.0, 0.5)
+	var col := FX_SPECIAL if rare else FX_GAIN
 	_spawn_floating_text("+%d o  COMBO x%d" % [int(bonus), combo], _center_of(terminal), col)
 	_burst_particles(_center_of(terminal))
 	_flash(col, 0.28 if rare else 0.18)
@@ -1168,13 +1268,13 @@ func _update_typing_ui() -> void:
 		return
 
 	var prefix := "[color=#ffcf40][RARE] [/color]" if current_is_rare else ""
-	command_label.text = "%s[color=#5dffa0]%s[/color][bgcolor=#ff2a99][color=#0a0e14]%s[/color][/bgcolor][color=#4d6b68]%s[/color]" % [prefix, done, next_ch, after]
+	command_label.text = "%s[color=#33ff33]%s[/color][bgcolor=#cccccc][color=#000000]%s[/color][/bgcolor][color=#338844]%s[/color]" % [prefix, done, next_ch, after]
 	if combo > 0:
 		term_hint.text = "COMBO x%d   —   PRODUCTION +%d%%" % [combo, int((combo_prod_mult() - 1.0) * 100)]
-		term_hint.add_theme_color_override("font_color", Color(1, 0.16, 0.62))
+		term_hint.add_theme_color_override("font_color", Color(0, 0.85, 0.85))
 	else:
 		term_hint.text = "Tape la commande ci-dessus   (ou clique = +1)"
-		term_hint.add_theme_color_override("font_color", Color(0.5, 0.62, 0.6))
+		term_hint.add_theme_color_override("font_color", Color(0, 0.7, 0.7))
 
 
 # ---------------------------------------------------------------------------
@@ -1184,7 +1284,7 @@ func _update_typing_ui() -> void:
 func _awaken_ai() -> void:
 	has_won = true
 	final_command_active = false
-	_flash(Color(0, 0.9, 0.82), 0.8)
+	_flash(FX_SPECIAL, 0.8)
 	_play_sfx("victory")
 	_burst_particles(_center_of(terminal))
 	save_game()
@@ -1222,14 +1322,14 @@ func _start_random_event() -> void:
 	event_id = ["instabilite", "surcharge"][randi() % 2]
 	event_active = true
 	event_timer = EVENT_DURATION
-	_flash(Color(1, 0.35, 0.2), 0.3)
+	_flash(FX_EVENT, 0.3)
 	match event_id:
 		"instabilite":
 			_play_sfx("glitch")
-			_show_toast("INSTABILITÉ CONNEXION", "La commande est brouillée pendant %d s — tape à l'instinct !" % int(EVENT_DURATION), Color(1, 0.35, 0.3), 3.0)
+			_show_toast("INSTABILITÉ CONNEXION", "La commande est brouillée pendant %d s — tape à l'instinct !" % int(EVENT_DURATION), TOAST_EVENT, 3.0)
 		"surcharge":
 			_play_sfx("overload")
-			_show_toast("SURCHARGE RÉSEAU", "Production réduite pendant %d s." % int(EVENT_DURATION), Color(1, 0.6, 0.2), 3.0)
+			_show_toast("SURCHARGE RÉSEAU", "Production réduite pendant %d s." % int(EVENT_DURATION), TOAST_EVENT, 3.0)
 
 
 func _end_event() -> void:
@@ -1237,7 +1337,7 @@ func _end_event() -> void:
 	event_id = ""
 	event_spawn_timer = randf_range(EVENT_SPAWN_MIN, EVENT_SPAWN_MAX)
 	_play_sfx("stable", -4.0)
-	_show_toast("RÉSEAU STABILISÉ", "Retour à la normale.", Color(0, 0.9, 0.82), 2.0)
+	_show_toast("RÉSEAU STABILISÉ", "Retour à la normale.", TOAST_WIN, 2.0)
 
 
 # Brouillage déterministe qui change ~8x/seconde (lettres qui clignotent).
@@ -1257,27 +1357,38 @@ func _do_hack(at_pos: Vector2) -> void:
 	_earn(gain)
 	_add_terminal_line(gain)
 	# Feedback visuel : +X flottant, pop du compteur, jet de particules.
-	_spawn_floating_text("+%d o" % int(gain), at_pos, Color(0, 0.9, 0.82))
+	_spawn_floating_text("+%d o" % int(gain), at_pos, FX_GAIN)
 	_pop(data_label)
 	_burst_particles(at_pos)
 	_update_display()
 
 
-# Ajoute une ligne "hacker" au log du terminal (et le fait défiler).
-func _add_terminal_line(gain: float) -> void:
-	var flavor: String = HACK_LINES[randi() % HACK_LINES.size()]
-	var line := "[color=#7fd8d0]%s[/color]  [color=#5dffa0]+%d o[/color]" % [flavor, int(gain)]
+# Journalise une ligne façon flux de commandes DOS :
+#   A:\> <label> ........ OK   +N o
+# Police monospace -> les points de conduite alignent la colonne OK/gain.
+func _term_log(label: String, gain: int, rare := false, ok := true) -> void:
+	var tag := "[color=#ffcf40][RARE] [/color]" if rare else ""
+	var dots := ".".repeat(maxi(3, 40 - label.length()))
+	var status := "[color=#3aaa3a]OK[/color]" if ok else "[color=#aa6a2a]…[/color]"
+	var line := "[color=#4fd04f]A:\\> [/color]%s[color=#c9f2d1]%s[/color] [color=#2f5f2f]%s[/color] %s  [color=#ffe14d]+%d o[/color]" % [tag, label, dots, status, gain]
 	term_lines.append(line)
 	if term_lines.size() > 40:
 		term_lines.pop_front()
 	terminal_log.text = "\n".join(PackedStringArray(term_lines))
 
 
+# Ajoute une ligne "hacker" au log du terminal quand on clique (pas une vraie commande tapée).
+func _add_terminal_line(gain: float) -> void:
+	var flavor: String = HACK_LINES[randi() % HACK_LINES.size()]
+	_term_log(flavor, int(gain), false, false)
+
+
 func _seed_terminal() -> void:
 	term_lines = [
-		"[color=#5c807c]system: nexus online[/color]",
-		"[color=#5c807c]link: tunnel chiffré établi[/color]",
-		"[color=#5c807c]awaiting input...[/color]",
+		"[color=#3aaa3a]NEXUS OS 0.1.0 — 640K OK[/color]",
+		"[color=#5c9c5c]system: nexus online[/color]",
+		"[color=#5c9c5c]link: tunnel chiffré établi[/color]",
+		"[color=#5c9c5c]awaiting input...[/color]",
 	]
 	terminal_log.text = "\n".join(PackedStringArray(term_lines))
 
@@ -1318,13 +1429,13 @@ func _on_operation_pressed() -> void:
 		var reward := maxf(production_per_second() * OP_REWARD_SECONDS, click_value() * OP_MIN_REWARD_CLICKS)
 		_earn(reward)
 		_set_status("Opération réussie : +%d o !" % int(reward))
-		_spawn_floating_text("+%d o" % int(reward), _center_of(op_button), Color(0.4, 1.0, 0.5))
+		_spawn_floating_text("+%d o" % int(reward), _center_of(op_button), FX_GAIN)
 		_pop(data_label)
 		_burst_particles(_center_of(op_button))
 	else:
 		# Échec : la jauge de traçage monte.
 		trace = minf(TRACE_MAX, trace + TRACE_PER_FAIL)
-		_spawn_floating_text("ÉCHEC", _center_of(op_button), Color(1, 0.35, 0.3))
+		_spawn_floating_text("ÉCHEC", _center_of(op_button), FX_ALERT)
 		_shake(op_button)
 		if trace >= TRACE_MAX:
 			_start_intrusion()
@@ -1343,7 +1454,7 @@ func _start_intrusion() -> void:
 	typed_len = 0
 	current_is_rare = false
 	combo = 0
-	_flash(Color(1, 0.15, 0.15), 0.45)
+	_flash(FX_ALERT, 0.45)
 	_play_sfx("alert")
 	_set_status("INTRUSION DÉTECTÉE ! Tape « %s » avant la fin du compte à rebours !" % ESCAPE_COMMAND)
 
@@ -1352,8 +1463,8 @@ func _start_intrusion() -> void:
 func _escape_intrusion() -> void:
 	intrusion_active = false
 	trace = 0.0
-	_flash(Color(0, 0.9, 0.82), 0.3)
-	_spawn_floating_text("ÉCHAPPÉ !", _center_of(terminal), Color(0.4, 1.0, 0.5))
+	_flash(FX_GAIN, 0.3)
+	_spawn_floating_text("ÉCHAPPÉ !", _center_of(terminal), FX_GAIN)
 	_burst_particles(_center_of(terminal))
 	_set_status("Logs purgés — tu t'es échappé à temps !")
 	_pick_new_command()
@@ -1377,7 +1488,7 @@ func _show_busted(lost: float) -> void:
 	busted_malus.text = "Production divisée par %d pendant %d s" % [int(1.0 / MALUS_MULT), int(MALUS_DURATION)]
 	busted_overlay.visible = true
 	busted_overlay.modulate.a = 0.0
-	_flash(Color(1, 0.1, 0.1), 0.7)
+	_flash(FX_ALERT, 0.7)
 	_play_sfx("alert", 2.0)
 	_set_status("TRACÉ ! Données effacées.")
 
@@ -1411,28 +1522,101 @@ func _on_busted_input(event: InputEvent) -> void:
 
 
 # Bandeau d'information non-bloquant (apparaît, reste ~duration s, disparaît).
+const TOAST_MAX_STACK := 4              # nb max de toasts empilés simultanément
+
+# Empile un toast newt (boîte claire à ombre, bande de titre colorée par type) en haut
+# à droite. 'color' = couleur DOS de la bande (voir constantes TOAST_* ci-dessous).
 func _show_toast(title: String, message: String, color: Color, duration: float = 2.6) -> void:
-	toast_title.text = title
-	toast_title.add_theme_color_override("font_color", color)
-	toast_msg.text = message
-	toast.visible = true
-	toast.modulate.a = 0.0
-	toast.offset_top = 44.0
-	var t := create_tween().set_parallel(true)
-	t.tween_property(toast, "modulate:a", 1.0, 0.18)
-	t.tween_property(toast, "offset_top", 60.0, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var bar_col := color
 
-	_toast_id += 1
-	var my_id := _toast_id
-	get_tree().create_timer(duration).timeout.connect(func() -> void: _hide_toast(my_id))
+	# Boîte claire à bord noir + ombre portée dure (style newt).
+	var box := PanelContainer.new()
+	box.add_theme_stylebox_override("panel", _make_flat(Color(0.851, 0.851, 0.851), Color(0, 0, 0), 1, Vector2(6, 6)))
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 0)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(vb)
+
+	# Bande de titre colorée selon le type.
+	var bar := PanelContainer.new()
+	bar.add_theme_stylebox_override("panel", _make_bar_style(bar_col))
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tl := Label.new()
+	tl.text = title
+	tl.add_theme_color_override("font_color", Color(1, 1, 1))
+	tl.add_theme_font_size_override("font_size", 13)
+	bar.add_child(tl)
+	vb.add_child(bar)
+
+	# Corps du message (texte noir sur la boîte claire).
+	var mm := MarginContainer.new()
+	mm.add_theme_constant_override("margin_left", 11)
+	mm.add_theme_constant_override("margin_right", 11)
+	mm.add_theme_constant_override("margin_top", 8)
+	mm.add_theme_constant_override("margin_bottom", 9)
+	var ml := Label.new()
+	ml.text = message
+	ml.add_theme_color_override("font_color", Color(0, 0, 0))
+	ml.add_theme_font_size_override("font_size", 12)
+	ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mm.add_child(ml)
+	vb.add_child(mm)
+
+	toast_stack.add_child(box)
+	# Limite la pile : on retire le plus ancien si on dépasse.
+	while toast_stack.get_child_count() > TOAST_MAX_STACK:
+		toast_stack.get_child(0).queue_free()
+
+	# Apparition en fondu.
+	box.modulate.a = 0.0
+	create_tween().tween_property(box, "modulate:a", 1.0, 0.18)
+
+	# Disparition automatique après 'duration'.
+	get_tree().create_timer(duration).timeout.connect(func() -> void: _dismiss_toast(box))
 
 
-func _hide_toast(id: int) -> void:
-	if id != _toast_id or not toast.visible:
-		return                              # un toast plus récent est apparu entre-temps
+func _dismiss_toast(box: Control) -> void:
+	if not is_instance_valid(box):
+		return
 	var t := create_tween()
-	t.tween_property(toast, "modulate:a", 0.0, 0.3)
-	t.tween_callback(func() -> void: toast.visible = false)
+	t.tween_property(box, "modulate:a", 0.0, 0.3)
+	t.tween_callback(box.queue_free)
+
+
+# Teintes DOS des bandes de toast, par type sémantique.
+const TOAST_ALERT := Color(0.667, 0, 0)    # rouge : boss, danger, échec
+const TOAST_WIN := Color(0, 0.43, 0)       # vert : victoire, gain
+const TOAST_EVENT := Color(0.7, 0.33, 0)   # orange : événement temporaire
+const TOAST_SYS := Color(0, 0, 0.8)        # bleu : déblocage, système
+const TOAST_FRAG := Color(0.541, 0, 0.541) # magenta : prestige / fragments
+
+
+# Petit fabricant de StyleBoxFlat carré (fond + bord + ombre dure optionnelle).
+func _make_flat(bg: Color, border: Color, border_w: int, shadow_off: Vector2) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_width_left = border_w
+	s.border_width_top = border_w
+	s.border_width_right = border_w
+	s.border_width_bottom = border_w
+	s.border_color = border
+	if shadow_off != Vector2.ZERO:
+		s.shadow_color = Color(0, 0, 0)
+		s.shadow_size = 1
+		s.shadow_offset = shadow_off
+	return s
+
+
+func _make_bar_style(col: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = col
+	s.content_margin_left = 10.0
+	s.content_margin_right = 10.0
+	s.content_margin_top = 3.0
+	s.content_margin_bottom = 3.0
+	return s
 
 
 # ---------------------------------------------------------------------------
@@ -1447,9 +1631,9 @@ func _start_boss() -> void:
 	boss_timer = float(boss_type.time)
 	boss_panel.visible = true
 	boss_title.text = "/// %s ///" % boss_type.name
-	_flash(Color(1, 0.16, 0.62), 0.4)
+	_flash(FX_ALERT, 0.4)
 	_play_sfx("boss")
-	_show_toast(boss_type.name + " DÉTECTÉ", boss_type.desc, Color(1, 0.16, 0.62), 3.8)
+	_show_toast(boss_type.name + " DÉTECTÉ", boss_type.desc, TOAST_ALERT, 3.8)
 	_set_status("%s détecté ! %s" % [boss_type.name, boss_type.desc])
 
 
@@ -1468,10 +1652,10 @@ func _defeat_boss() -> void:
 	_earn(reward)
 	_gain_fragments(frag_reward)
 
-	_flash(Color(0, 0.9, 0.82), 0.5)
-	_spawn_floating_text("FIREWALL BRISÉ !  +%d o  +%d Frag" % [int(reward), frag_reward], _center_of(terminal), Color(0.4, 1.0, 0.5))
+	_flash(FX_GAIN, 0.5)
+	_spawn_floating_text("FIREWALL BRISÉ !  +%d o  +%d Frag" % [int(reward), frag_reward], _center_of(terminal), FX_GAIN)
 	_burst_particles(_center_of(terminal))
-	_show_toast("FIREWALL BRISÉ  (Nv %d)" % boss_level, "Butin : +%d o     •     +%d Fragment(s)" % [int(reward), frag_reward], Color(0.4, 1.0, 0.5), 3.0)
+	_show_toast("FIREWALL BRISÉ  (Nv %d)" % boss_level, "Butin : +%d o     •     +%d Fragment(s)" % [int(reward), frag_reward], TOAST_WIN, 3.0)
 	_set_status("Firewall Nv %d brisé ! +%d o, +%d Fragment(s)." % [boss_level, int(reward), frag_reward])
 
 
@@ -1480,8 +1664,8 @@ func _fail_boss() -> void:
 	boss_panel.visible = false
 	firewall_malus_remaining = FIREWALL_MALUS_DURATION
 	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
-	_flash(Color(1, 0.4, 0.2), 0.5)
-	_show_toast("FIREWALL NON BRISÉ", "Contre-attaque : production /%d pendant %d s" % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)], Color(1, 0.45, 0.3), 3.0)
+	_flash(FX_ALERT, 0.5)
+	_show_toast("FIREWALL NON BRISÉ", "Contre-attaque : production /%d pendant %d s" % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)], TOAST_ALERT, 3.0)
 	_set_status("Firewall non brisé ! Contre-attaque : production /%d pendant %d s." % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)])
 
 
@@ -1716,8 +1900,8 @@ func _on_network_node(index: int) -> void:
 	n.owned = true
 	_apply_network_node(n)
 	_play_sfx("buy", -3.0, _buy_pitch_step(_network_owned_count()))
-	_flash(Color(0, 0.9, 0.82), 0.3)
-	_show_toast("NŒUD PIRATÉ", _network_node_desc(n), Color(0, 0.9, 0.82), 2.4)
+	_flash(FX_GAIN, 0.3)
+	_show_toast("NŒUD PIRATÉ", _network_node_desc(n), TOAST_WIN, 2.4)
 	_update_display()
 
 
@@ -1837,8 +2021,8 @@ func _on_zeroday_pressed() -> void:
 	zeroday_button.visible = false
 	zeroday_buff_remaining = ZERODAY_BUFF_DURATION
 	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
-	_flash(Color(0, 0.9, 0.82), 0.4)   # flash cyan : boost
-	_spawn_floating_text("FAILLE !", _center_of(zeroday_button), Color(1, 0.16, 0.62))
+	_flash(FX_SPECIAL, 0.4)   # flash ambre : boost faille
+	_spawn_floating_text("FAILLE !", _center_of(zeroday_button), FX_SPECIAL)
 	_set_status("Faille exploitée : production x%d pendant %d s !" % [int(ZERODAY_MULT), int(ZERODAY_BUFF_DURATION)])
 	_update_display()
 
@@ -1849,7 +2033,9 @@ func _on_prestige_pressed() -> void:
 	if pending_fragments() < 1:
 		_set_status("Pas encore assez accumulé pour compiler.")
 		return
-	prestige_confirm.popup_centered()
+	var gained := pending_fragments()
+	var msg := "Compiler l'IA remet à zéro tes [color=#000080]Données[/color] et tes générateurs, mais te rapporte [color=#000080]+%d Fragment(s) d'IA[/color] permanents.\n\nConfirmer la compilation ?" % gained
+	_show_confirm("Compilation de l'IA", msg, "Compiler", false, _do_prestige)
 
 
 func _do_prestige() -> void:
@@ -1862,7 +2048,7 @@ func _do_prestige() -> void:
 	if not unlocked.augment:
 		unlocked.augment = true
 		_apply_gating()
-		_show_toast("NOUVELLE SECTION", "Augmentations débloquées — dépense tes Fragments d'IA (onglet Augmentations).", Color(1, 0.16, 0.62), 3.5)
+		_show_toast("NOUVELLE SECTION", "Augmentations débloquées — dépense tes Fragments d'IA (onglet Augmentations).", TOAST_FRAG, 3.5)
 	# Reset de la RUN uniquement. Les items (payés en fragments) restent.
 	data = 0.0
 	run_earned = 0.0
@@ -2000,7 +2186,13 @@ func _on_save_pressed() -> void:
 
 
 func _on_reset_pressed() -> void:
-	# Reset TOTAL (Données, générateurs, fragments ET items) — outil de test.
+	# Action destructive : on demande confirmation via le modal (focus par défaut sur Annuler).
+	var msg := "[color=#aa0000]ATTENTION.[/color] Cette action efface [color=#aa0000]TOUTE ta progression[/color] — Données, Fragments, générateurs, augmentations, réseau et déblocages.\n\nElle est [color=#aa0000]IRRÉVERSIBLE.[/color]"
+	_show_confirm("Réinitialiser la partie", msg, "Tout effacer", true, _do_reset)
+
+
+func _do_reset() -> void:
+	# Reset TOTAL (Données, générateurs, fragments ET items).
 	data = 0.0
 	run_earned = 0.0
 	fragments = 0
@@ -2122,6 +2314,9 @@ func _update_display() -> void:
 	data_label.text = "%d o" % data
 	prod_label.text = "%.1f o/s" % production_per_second()
 	fragment_label.text = "%d" % fragments
+	# Horloge de la barre de statut (esthétique DOS).
+	var t := Time.get_time_dict_from_system()
+	clock_label.text = "%02d:%02d:%02d" % [t.hour, t.minute, t.second]
 	_update_typing_ui()
 
 	# Ligne de prestige : bonus actuel, accumulé, et seuil du prochain fragment.
@@ -2160,9 +2355,8 @@ func _update_display() -> void:
 		var potential := int(maxf(production_per_second() * OP_REWARD_SECONDS, click_value() * OP_MIN_REWARD_CLICKS))
 		op_button.text = "PIRATER LA CIBLE : +%d o  (%d%% de réussite)" % [potential, int(OP_SUCCESS_CHANCE * 100)]
 
-	# Jauge de traçage.
-	trace_bar.value = trace
-	trace_label.text = "Traçage : %d %%" % int(trace)
+	# Jauge de traçage (barre à ticks style FreeDOS, couleur selon la menace).
+	_update_trace_bar()
 
 	# Bouton de faille (compte à rebours pendant qu'il est visible).
 	if zeroday_window_remaining > 0.0:
