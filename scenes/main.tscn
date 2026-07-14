@@ -431,9 +431,19 @@ theme_override_font_sizes/normal_font_size = 12
 bbcode_enabled = true
 scroll_following = true
 
-[node name="CommandLabel" type="RichTextLabel" parent="HUD/Root/Body/Left/Terminal/TVBox"]
+[node name="TCommand" type="HBoxContainer" parent="HUD/Root/Body/Left/Terminal/TVBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="CommandPrefix" type="Label" parent="HUD/Root/Body/Left/Terminal/TVBox/TCommand"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.333, 1, 0.333, 1)
+theme_override_font_sizes/font_size = 13
+text = "A:\\NEXUS>"
+
+[node name="CommandLabel" type="RichTextLabel" parent="HUD/Root/Body/Left/Terminal/TVBox/TCommand"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 26)
+custom_minimum_size = Vector2(500, 26)
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/normal_font_size = 16
@@ -699,6 +709,7 @@ text = "© 2026 Jonathan GAULUPEAU"
 
 [node name="FxLayer" type="Control" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -725,6 +736,7 @@ color = Color(0.2, 0.9, 0.3, 1)
 
 [node name="Flash" type="ColorRect" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
