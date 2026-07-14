@@ -1,0 +1,12 @@
+# Godot 4 — cache local (régénéré automatiquement à l'ouverture du projet)
+.godot/
+
+# Builds exportés (gros binaires, régénérables via export_presets.cfg)
+build/
+
+# Fichiers temporaires d'édition Godot
+*.tmp
+export_credentials.cfg
+
+# Réglages locaux de l'outil Claude Code (machine-spécifiques)
+.claude/settings.local.json

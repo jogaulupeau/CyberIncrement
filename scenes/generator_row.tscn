@@ -1,0 +1,38 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/generator_row.gd" id="1_row"]
+
+[node name="GeneratorRow" type="PanelContainer"]
+custom_minimum_size = Vector2(460, 0)
+script = ExtResource("1_row")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="HBox" type="HBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="IconRect" type="TextureRect" parent="Margin/HBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="InfoLabel" type="Label" parent="Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+autowrap_mode = 2
+text = "Générateur (x0)   —   +0 o/s"
+
+[node name="BuyButton" type="Button" parent="Margin/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Acheter"

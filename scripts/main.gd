@@ -1,0 +1,2254 @@
+extends Control
+## Brique 8 : boutique d'augmentations permanentes (inspiré Scritchy Scratchy).
+##
+## Les Fragments d'IA gagnés au prestige servent enfin à quelque chose : on les
+## dépense dans des ITEMS permanents (ils SURVIVENT au prestige). Trois familles :
+##   - PUISSANCE   : multiplie production / gain au clic
+##   - EFFICACITE  : réduit le coût des générateurs, ajoute de l'auto-clic
+##   - VARIETE     : bonus de synergie (récompense la diversité de générateurs)
+## Comme les générateurs, tout est data-driven : ajouter un item = une ligne.
+
+const GeneratorRowScene := preload("res://scenes/generator_row.tscn")
+const ItemRowScene := preload("res://scenes/item_row.tscn")
+
+const SAVE_PATH := "user://save.json"
+const SAVE_VERSION := 7                 # +items +daemons +network +objectif +déblocages
+
+# Infos de publication (affichées dans l'aide "À propos" et le footer).
+const GAME_VERSION := "0.1.0"
+const GAME_AUTHOR := "Jonathan GAULUPEAU"
+const GAME_YEAR := "2026"
+const GAME_LICENSE := "Creative Commons BY-NC 4.0"
+
+const FRAGMENT_BONUS := 0.10
+const PRESTIGE_DIV := 10000.0
+
+# --- Réglages "hack à risque" (Brique 9) ------------------------------------
+const OP_COOLDOWN := 15.0              # délai entre deux opérations (s)
+const OP_SUCCESS_CHANCE := 0.70        # proba de réussite (0..1)
+const OP_REWARD_SECONDS := 30.0        # réussite = X secondes de production
+const OP_MIN_REWARD_CLICKS := 25.0     # plancher de gain (en clics) pour le début de partie
+const TRACE_MAX := 100.0
+const TRACE_PER_FAIL := 40.0           # 3 échecs enchaînés (même espacés du cooldown) => TRACÉ
+const TRACE_DECAY := 0.5               # décroissance lente : les échecs "collent" entre les opérations
+const MALUS_MULT := 0.25               # "TRACÉ" : production ×0.25 (soit ÷4)
+const MALUS_DURATION := 20.0
+const ZERODAY_MULT := 3.0              # faille : production ×3
+const ZERODAY_BUFF_DURATION := 30.0
+const ZERODAY_WINDOW := 10.0           # temps pour cliquer la faille
+const ZERODAY_SPAWN_MIN := 45.0        # intervalle aléatoire entre deux failles
+const ZERODAY_SPAWN_MAX := 90.0
+
+# Lignes "hacker" affichées dans le terminal à chaque clic (choisies au hasard).
+const HACK_LINES := [
+	"breach: pare-feu contourné",
+	"inject: payload livré",
+	"scan: port 443 ouvert",
+	"root: privilèges élevés",
+	"exfil: données siphonnées",
+	"crack: hash inversé",
+	"spoof: adresse MAC changée",
+	"tunnel: proxy enchaîné",
+	"decrypt: clé AES cassée",
+	"ghost: journaux effacés",
+]
+
+# Commandes à TAPER au clavier (minuscules, lettres/chiffres/espaces uniquement).
+const COMMANDS := [
+	"nmap scan subnet",
+	"enumerate smb shares",
+	"crack wpa handshake",
+	"dump lsass memory",
+	"spoof arp table",
+	"bypass firewall rules",
+	"exploit cve 2026",
+	"resolve dns records",
+	"dump user hashes",
+	"flush iptables rules",
+	"escalate root access",
+	"sniff network packets",
+	"mount remote share",
+	"grep etc passwd",
+	"patch zero day",
+	"clone rfid badge",
+	"hashcat crack md5",
+	"bruteforce ssh login",
+	"wipe access logs",
+	"inject sql payload",
+]
+const COMBO_DECAY := 3.0                # secondes sans frappe correcte -> combo remis à 0
+const COMBO_STEP := 0.20               # chaque palier de combo = +20% au bonus de fin
+const COMBO_PROD_STEP := 0.05          # chaque palier de combo = +5% de PRODUCTION (jeu actif)
+const COMBO_PROD_CAP := 20             # plafond du bonus de production du combo
+
+# Commandes RARES (longues) : n'apparaissent qu'à combo élevé, mais rapportent gros.
+const COMMANDS_RARE := [
+	"pivot internal gateway compromise host",
+	"exfiltrate encrypted database archive",
+	"dump domain admin credentials mimikatz",
+	"deploy persistent reverse shell backdoor",
+	"crack kerberos service tickets offline",
+	"escalate kernel exploit root privileges",
+	"evade endpoint detection sandbox analysis",
+	"enumerate active directory trust relations",
+	"deploy cobalt strike beacon network",
+	"intercept session tokens process memory",
+	"chain exploits reach domain admin",
+]
+const RARE_COMBO_THRESHOLD := 4        # combo minimum pour qu'une commande rare puisse sortir
+const RARE_BONUS_MULT := 2.5           # bonus des commandes rares (× en plus du calcul normal)
+
+# Malus de frappe : une mauvaise touche casse le combo et fait monter le traçage.
+const WRONG_KEY_TRACE := 6.0
+
+# Contre-mesure : à 100% de traçage, on a INTRUSION_TIME secondes pour taper ESCAPE_COMMAND.
+const INTRUSION_TIME := 6.0
+const ESCAPE_COMMAND := "purge logs"
+
+# Objectif de fin : rassembler AWAKEN_TARGET Fragments (cumulés), puis taper la
+# commande d'éveil pour atteindre la Singularité (victoire).
+const AWAKEN_TARGET := 200
+const AWAKEN_COMMAND := "sudo awaken the ai singularity"
+
+# Événements aléatoires (P4) : compliquent ponctuellement le gameplay.
+const EVENT_SPAWN_MIN := 40.0
+const EVENT_SPAWN_MAX := 80.0
+const EVENT_DURATION := 12.0
+const EVENT_SURCHARGE_MULT := 0.6      # "surcharge" : production réduite
+const GLITCH_CHARS := "#%&@?$*"        # symboles de brouillage pour l'instabilité
+
+# Programmes actifs (daemons).
+const OVERCLOCK_MULT := 3.0            # production ×3 pendant le daemon OVERCLOCK
+
+# Pare-feux (boss de frappe) : apparaissent périodiquement, à briser au clavier.
+const FIREWALL_SPAWN_MIN := 120.0     # intervalle aléatoire entre deux firewalls
+const FIREWALL_SPAWN_MAX := 180.0
+const FIREWALL_TIME := 28.0           # temps pour le briser
+const FIREWALL_BASE_HP := 120.0       # PV du 1er firewall (dégâts = longueur des commandes)
+const FIREWALL_HP_GROWTH := 0.5       # +50% de PV par firewall vaincu
+const FIREWALL_MALUS_MULT := 0.5      # contre-attaque en cas d'échec : production /2
+const FIREWALL_MALUS_DURATION := 15.0
+const FIREWALL_REWARD_SECONDS := 90.0 # butin de base = X secondes de production
+const FIREWALL_REWARD_LEVEL_STEP := 0.5 # +50% de butin par firewall déjà vaincu
+const FIREWALL_COMBO_STEP := 0.05     # +5% de butin par palier de combo au moment de la victoire
+const BOSS_TYPO_HEAL := 8.0           # PV rendus par faute de frappe (Analyste SOC)
+const BOSS_THROTTLE_DMG := 12.0       # dégâts FIXES par commande (AntiDDOS : le volume compte)
+
+# Types de boss (tirés au hasard). gimmick : contrainte spéciale.
+const BOSS_TYPES := [
+	{ "id": "firewall", "name": "FIREWALL",        "hp_mult": 1.0, "time": 28.0, "gimmick": "",          "desc": "Pare-feu standard : chaque commande l'endommage." },
+	{ "id": "edr",      "name": "EDR",             "hp_mult": 0.7, "time": 30.0, "gimmick": "rare_only", "desc": "Seules les commandes RARES l'endommagent vraiment (normales à 20 %)." },
+	{ "id": "soc",      "name": "ANALYSTE SOC",    "hp_mult": 1.4, "time": 32.0, "gimmick": "typo_heal", "desc": "Sois précis : chaque faute de frappe fait du bruit et le soigne." },
+	{ "id": "ssl",      "name": "CHIFFREMENT SSL", "hp_mult": 0.9, "time": 30.0, "gimmick": "glitch",    "desc": "Trafic chiffré : les commandes sont brouillées, tape à l'aveugle." },
+	{ "id": "antiddos", "name": "ANTI-DDOS",       "hp_mult": 1.0, "time": 34.0, "gimmick": "throttle",  "desc": "Débit limité : dégâts fixes par commande — c'est le VOLUME qui compte." },
+]
+
+# --- État global ------------------------------------------------------------
+var data: float = 0.0
+var per_click: int = 1
+var fragments: int = 0
+var run_earned: float = 0.0
+
+# État "hack à risque" (transitoire : non sauvegardé, remis à zéro au chargement).
+var op_cooldown_remaining: float = 0.0
+var trace: float = 0.0                 # jauge de traçage 0..TRACE_MAX
+var malus_remaining: float = 0.0       # temps restant du malus "TRACÉ"
+var zeroday_buff_remaining: float = 0.0 # temps restant du buff faille
+var zeroday_window_remaining: float = 0.0 # temps restant pour cliquer une faille visible
+var zeroday_spawn_timer: float = 0.0   # compte à rebours avant la prochaine faille
+var _pop_tween: Tween = null           # animation de "pop" en cours sur le compteur
+var _toast_id: int = 0                 # jeton pour éviter qu'un ancien toast masque un récent
+var term_lines: Array[String] = []     # tampon des lignes affichées dans le terminal
+
+# Mini-jeu de frappe (taper les commandes de hack).
+var current_command: String = ""       # commande à taper actuellement
+var typed_len: int = 0                 # nombre de caractères déjà tapés correctement
+var combo: int = 0                     # nombre de commandes enchaînées
+var combo_timer: float = 0.0           # temps écoulé depuis la dernière bonne frappe
+var current_is_rare: bool = false      # la commande en cours est-elle une commande rare ?
+var intrusion_active: bool = false     # est-on en état d'alerte (contre-mesure) ?
+var intrusion_timer: float = 0.0       # temps restant pour s'échapper
+
+# Objectif / fin de partie.
+var total_fragments_earned: int = 0    # Fragments gagnés au total (compteur d'objectif)
+var has_won: bool = false              # l'IA a-t-elle été éveillée ?
+var final_command_active: bool = false # la commande affichée est-elle celle de l'éveil ?
+var prestige_count: int = 0            # nombre de prestiges (pour le récap)
+var play_time: float = 0.0             # temps de jeu cumulé (pour le récap)
+
+# Événements aléatoires.
+var event_active: bool = false
+var event_id: String = ""
+var event_timer: float = 0.0
+var event_spawn_timer: float = 0.0
+
+# Audio.
+const SFX_FILES := {
+	"key": "res://assets/audio/key.wav",
+	"key_wrong": "res://assets/audio/key_wrong.wav",
+	"command": "res://assets/audio/command.wav",
+	"rare": "res://assets/audio/rare.wav",
+	"buy": "res://assets/audio/buy.wav",
+	"prestige": "res://assets/audio/prestige.wav",
+	"alert": "res://assets/audio/alert.wav",
+	"unlock": "res://assets/audio/unlock.wav",
+	"boss": "res://assets/audio/boss.wav",
+	"victory": "res://assets/audio/victory.wav",
+	"glitch": "res://assets/audio/glitch.wav",
+	"overload": "res://assets/audio/overload.wav",
+	"stable": "res://assets/audio/stable.wav",
+}
+var _sfx_streams := {}
+var _sfx_players: Array[AudioStreamPlayer] = []
+var _sfx_idx := 0
+var _music_player: AudioStreamPlayer
+var muted: bool = false
+var sfx_volume: float = 0.8            # volume des effets (0..1), réglé par le slider
+
+# Déblocage progressif des mécaniques (onboarding).
+var unlocked := { "augment": false, "daemons": false, "operations": false, "network": false }
+# Entrées "mystère" dans la boutique : coût visible, nom masqué tant que non acheté.
+# reveal = Fragments cumulés pour que l'entrée APPARAISSE ; cost = coût du déblocage.
+var unlocks: Array[Dictionary] = [
+	{ "id": "u_ops",     "feature": "operations", "name": "Opérations à risque",  "cost": 3,  "reveal": 2, "owned": false, "help": "Coups de poker : gros gain instantané, mais un échec fait monter le traçage." },
+	{ "id": "u_daemons", "feature": "daemons",    "name": "Programmes (daemons)", "cost": 6,  "reveal": 5, "owned": false, "help": "Capacités actives (AUTOPWN, GHOST, OVERCLOCK) à débloquer et déclencher." },
+	{ "id": "u_network", "feature": "network",    "name": "Carte du réseau",      "cost": 10, "reveal": 8, "owned": false, "help": "Un réseau de nœuds à pirater pour des bonus permanents." },
+]
+var unlock_rows: Array[ItemRow] = []
+
+# Aide (P3). gate = "" -> toujours ; sinon clé de `unlocked` requise pour l'afficher.
+var help_topics: Array[Dictionary] = [
+	{ "id": "terminal", "label": "Terminal", "gate": "",
+		"title": "Le terminal (frappe)",
+		"text": "Tape la commande affichée : chaque bonne lettre rapporte des Données. SURTOUT, tant que tu enchaînes sans faute, ton COMBO monte et BOOSTE toute ta production (+5 % par palier) — taper activement dope ton économie. Le combo retombe si tu t'arrêtes (3 s). À combo élevé, des commandes RARES (dorées) apparaissent et valent +2 au combo. Une mauvaise touche casse le combo et fait monter le traçage. Tu peux aussi cliquer le terminal pour +1." },
+	{ "id": "generators", "label": "Générateurs", "gate": "",
+		"title": "Générateurs",
+		"text": "Achète-les avec des Données : ils produisent automatiquement, en continu. Le coût augmente à chaque achat. Ils sont remis à zéro quand tu compiles l'IA (prestige)." },
+	{ "id": "tracage", "label": "Traçage", "gate": "",
+		"title": "Traçage & intrusion",
+		"text": "Les fautes de frappe (et les opérations ratées) remplissent la jauge de TRAÇAGE. À 100 %, une INTRUSION se déclenche : une commande d'urgence 'purge logs' apparaît, tape-la vite pour t'échapper. Si le chrono s'écoule, tu PERDS toutes tes Données et ta production est divisée par 4 un moment. La jauge redescend doucement si tu joues prudemment." },
+	{ "id": "prestige", "label": "Prestige", "gate": "",
+		"title": "Compiler l'IA (prestige)",
+		"text": "Sacrifie ta run en cours (Données + générateurs remis à zéro) contre des FRAGMENTS D'IA, permanents. Chaque Fragment donne +10 % de production pour toujours, et sert à débloquer/acheter dans les autres onglets. Objectif final : rassembler assez de Fragments pour ÉVEILLER l'IA." },
+	{ "id": "augment", "label": "Augmentations", "gate": "augment",
+		"title": "Augmentations",
+		"text": "Dépense tes Fragments d'IA pour des bonus PERMANENTS (production, gain au clic, réduction de coût). C'est aussi ici que tu débloques de nouvelles mécaniques (entrées 'accès verrouillé' en haut de la liste)." },
+	{ "id": "operations", "label": "Opérations", "gate": "operations",
+		"title": "Opérations à risque",
+		"text": "Un coup de poker : environ 70 % de chances de réussir pour un gros gain instantané (~30 s de production). En cas d'échec, le traçage monte. Un cooldown sépare deux tentatives. Parfois une FAILLE zero-day apparaît : clique-la pour un boost de production temporaire." },
+	{ "id": "daemons", "label": "Daemons", "gate": "daemons",
+		"title": "Programmes (daemons)",
+		"text": "Des capacités actives, déclenchées au clic. Débloque-les et améliore-les avec des Fragments (onglet Programmes).\n• AUTOPWN : pendant sa durée, TOUTE touche valide la commande (martèle le clavier).\n• GHOST : efface instantanément le traçage (coûte des Fragments à chaque usage).\n• OVERCLOCK : production ×3 un moment. Astuce : garde-le pour le coup fatal d'un boss." },
+	{ "id": "boss", "label": "Boss", "gate": "operations",
+		"title": "Boss (défenses)",
+		"text": "Périodiquement, une défense apparaît avec des PV et un chrono. Complète des commandes pour la briser avant la fin : gros butin + un Fragment. Échec = contre-attaque (production réduite). Chaque type a sa contrainte :\n• FIREWALL : standard (dégâts = longueur).\n• EDR : seules les commandes RARES l'endommagent.\n• ANALYSTE SOC : blindé, une faute de frappe le soigne (sois précis).\n• CHIFFREMENT SSL : commandes brouillées (à l'aveugle).\n• ANTI-DDOS : dégâts fixes par commande — enchaîne le VOLUME (AUTOPWN idéal)." },
+	{ "id": "network", "label": "Réseau", "gate": "network",
+		"title": "Carte du réseau",
+		"text": "Un graphe de nœuds à pirater de proche en proche (tu ne peux prendre qu'un nœud voisin d'un nœud déjà conquis). Les nœuds coûtent des Données mais donnent des bonus (production, clic, coût) ou des paquets de Données/Fragments. La carte se régénère à chaque prestige. Molette = zoom, clic-glissé = déplacer." },
+	{ "id": "about", "label": "À propos", "gate": "",
+		"title": "À propos",
+		"text": "Cyber Increment — version %s\n\nAuteur : %s\n© %s %s\nLicence : %s\n\nCe jeu est distribué sous licence Creative Commons Attribution - Pas d'Utilisation Commerciale 4.0 (CC BY-NC 4.0) : tu peux le partager et le modifier à condition d'en créditer l'auteur et de ne pas en faire un usage commercial.\n\nMoteur : Godot Engine 4.4.1. Icônes : game-icons.net (CC BY 3.0). Police : Share Tech Mono (SIL OFL)." % [GAME_VERSION, GAME_AUTHOR, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE] },
+]
+var help_buttons: Array[Button] = []
+
+# Boss "firewall".
+var boss_active: bool = false
+var boss_hp: float = 0.0
+var boss_max_hp: float = 0.0
+var boss_timer: float = 0.0            # temps restant pour le briser
+var boss_level: int = 0               # nombre de firewalls déjà vaincus (difficulté/récompense)
+var boss_type: Dictionary = {}        # type du boss en cours (voir BOSS_TYPES)
+var boss_spawn_timer: float = 0.0      # compte à rebours avant le prochain firewall
+var firewall_malus_remaining: float = 0.0  # contre-attaque en cours (prod /2)
+
+# --- Générateurs (achetés en Données, remis à zéro au prestige) --------------
+var generators: Array[Dictionary] = [
+	{ "name": "Script automatisé", "base_cost": 10.0,     "cost_growth": 1.15, "production": 1.0,   "count": 0, "icon": "res://assets/icons/processor.svg" },
+	{ "name": "Botnet",            "base_cost": 120.0,    "cost_growth": 1.15, "production": 8.0,   "count": 0, "icon": "res://assets/icons/spider-alt.svg" },
+	{ "name": "Ferme de serveurs", "base_cost": 1500.0,   "cost_growth": 1.15, "production": 50.0,  "count": 0, "icon": "res://assets/icons/server-rack.svg" },
+	{ "name": "IA distribuée",     "base_cost": 20000.0,  "cost_growth": 1.15, "production": 300.0, "count": 0, "icon": "res://assets/icons/artificial-intelligence.svg" },
+]
+
+# --- Items (achetés en Fragments, PERMANENTS) --------------------------------
+# effect : ce que l'item modifie. value : effet par niveau.
+# base_cost/cost_growth : coût EN FRAGMENTS, qui double(-ish) à chaque niveau.
+var items: Array[Dictionary] = [
+	{ "id": "overclock", "name": "Overclock CPU",        "category": "PUISSANCE",  "effect": "prod_mult",  "value": 0.25, "base_cost": 1.0, "cost_growth": 2.0, "max_level": 10, "level": 0, "icon": "res://assets/icons/cpu.svg" },
+	{ "id": "payload",   "name": "Injecteur de payload", "category": "PUISSANCE",  "effect": "click_mult", "value": 1.0,  "base_cost": 1.0, "cost_growth": 2.5, "max_level": 8,  "level": 0, "icon": "res://assets/icons/syringe.svg" },
+	{ "id": "compiler",  "name": "Compilateur optimisé", "category": "EFFICACITE", "effect": "cost_reduc", "value": 0.05, "base_cost": 2.0, "cost_growth": 2.0, "max_level": 6,  "level": 0, "icon": "res://assets/icons/gears.svg" },
+	{ "id": "daemon",    "name": "Daemon d'autoclic",    "category": "EFFICACITE", "effect": "autoclick",  "value": 1.0,  "base_cost": 3.0, "cost_growth": 2.5, "max_level": 10, "level": 0, "icon": "res://assets/icons/robot-golem.svg" },
+	{ "id": "synergie",  "name": "Protocole synergique", "category": "VARIETE",    "effect": "synergy",    "value": 0.05, "base_cost": 2.0, "cost_growth": 2.2, "max_level": 10, "level": 0, "icon": "res://assets/icons/circuitry.svg" },
+]
+
+var gen_rows: Array[GeneratorRow] = []
+var item_rows: Array[ItemRow] = []
+
+# --- Daemons (capacités actives, déclenchées au clic) ------------------------
+# cd_remaining : cooldown restant. active_remaining : durée d'effet restante.
+# level 0 = verrouillé. Chaque niveau (payé en Fragments) réduit le cooldown (-10%)
+# et allonge la durée (+duration_step). base_* = valeurs au niveau 1.
+var daemons: Array[Dictionary] = [
+	{ "id": "autopwn",   "name": "AUTOPWN",   "base_cooldown": 90.0, "base_duration": 6.0,  "duration_step": 1.5, "frag_base": 8.0, "frag_growth": 2.0, "max_level": 5, "level": 0, "cd_remaining": 0.0, "active_remaining": 0.0, "icon": "res://assets/icons/robot-golem.svg" },
+	{ "id": "ghost",     "name": "GHOST",     "pay_per_use": true, "use_cost": 1, "base_cooldown": 60.0, "base_duration": 0.0,  "duration_step": 0.0, "frag_base": 3.0, "frag_growth": 2.0, "max_level": 5, "level": 0, "cd_remaining": 0.0, "active_remaining": 0.0, "icon": "res://assets/icons/circuitry.svg" },
+	{ "id": "overclock", "name": "OVERCLOCK", "base_cooldown": 75.0, "base_duration": 20.0, "duration_step": 4.0, "frag_base": 5.0, "frag_growth": 2.0, "max_level": 5, "level": 0, "cd_remaining": 0.0, "active_remaining": 0.0, "icon": "res://assets/icons/cpu.svg" },
+]
+var daemon_buttons: Array[Button] = []
+var daemon_rows: Array[ItemRow] = []
+
+# --- Réseau (carte de nœuds à pirater, bonus PERMANENTS payés en Données) -----
+# owned = conquis. On ne peut pirater qu'un nœud adjacent à un nœud déjà conquis.
+# types : root (départ), prod (+% prod), click (+% frappe), cost (-% coût gén.),
+#         data (paquet de Données), frag (Fragments).
+# Carte PROCÉDURALE (roguelike) : régénérée à chaque prestige à partir d'un seed.
+# Bonus valables pour la run en cours (remis à zéro au prestige, comme les générateurs).
+const NETWORK_RINGS := 4              # nombre d'anneaux autour du CORE
+const NETWORK_COST_BASE := 400.0      # coût (Données) d'un nœud de l'anneau 1
+const NETWORK_COST_GROWTH := 5.0      # ×coût par anneau plus profond
+var network_nodes: Array[Dictionary] = []
+var network_connections: Array = []   # paires [i, j] d'indices reliés
+var network_seed: int = 0
+var network_buttons: Array[Button] = []
+var network_labels: Array[Label] = []
+var network_lines: Array = []
+var _node_style_owned: StyleBoxFlat
+var _node_style_hack: StyleBoxFlat
+var _node_style_locked: StyleBoxFlat
+var _network_fitted: bool = false     # la carte a-t-elle été recadrée sur la vue ?
+const NET_MIN_ZOOM := 0.35
+const NET_MAX_ZOOM := 2.5
+
+# --- Interface --------------------------------------------------------------
+@onready var data_label: Label = %DataLabel
+@onready var prod_label: Label = %ProdLabel
+@onready var terminal: PanelContainer = %Terminal
+@onready var terminal_log: RichTextLabel = %TerminalLog
+@onready var command_label: RichTextLabel = %CommandLabel
+@onready var term_hint: Label = %TermHint
+@onready var tabs: TabContainer = %Tabs
+@onready var gen_container: VBoxContainer = %GenContainer
+@onready var fragment_label: Label = %FragmentLabel
+@onready var prestige_info: Label = %PrestigeInfo
+@onready var prestige_button: Button = %PrestigeButton
+@onready var prestige_confirm: ConfirmationDialog = %PrestigeConfirm
+@onready var shop_container: VBoxContainer = %ShopContainer
+@onready var daemons_bar: HBoxContainer = %DaemonsBar
+@onready var daemon_container: VBoxContainer = %DaemonContainer
+@onready var network_view: Control = %NetworkView
+@onready var network_content: Node2D = %NetworkContent
+@onready var op_button: Button = %OpButton
+@onready var ops_title: Label = %OpsTitle
+@onready var ops_desc: Label = %OpsDesc
+@onready var daemons_panel: PanelContainer = %DaemonsPanel
+@onready var cooldown_bar: ProgressBar = %CooldownBar
+@onready var trace_label: Label = %TraceLabel
+@onready var trace_bar: ProgressBar = %TraceBar
+@onready var zeroday_button: Button = %ZeroDayButton
+@onready var event_status: Label = %EventStatus
+@onready var boss_panel: PanelContainer = %BossPanel
+@onready var boss_title: Label = %BossTitle
+@onready var boss_hp_bar: ProgressBar = %BossHPBar
+@onready var boss_info: Label = %BossInfo
+@onready var toast: PanelContainer = %Toast
+@onready var toast_title: Label = %ToastTitle
+@onready var toast_msg: Label = %ToastMsg
+@onready var objective_label: Label = %ObjectiveLabel
+@onready var victory_overlay: Control = %VictoryOverlay
+@onready var victory_panel: PanelContainer = %VictoryPanel
+@onready var victory_stats: Label = %VictoryStats
+@onready var continue_button: Button = %ContinueButton
+@onready var logo_icon: TextureRect = %LogoIcon
+@onready var fragment_icon: TextureRect = %FragmentIcon
+@onready var fx_layer: Control = %FxLayer
+@onready var click_particles: CPUParticles2D = %ClickParticles
+@onready var flash_rect: ColorRect = %Flash
+@onready var busted_overlay: Control = %BustedOverlay
+@onready var busted_panel: PanelContainer = %BustedPanel
+@onready var busted_lost: Label = %BustedLost
+@onready var busted_malus: Label = %BustedMalus
+@onready var mute_button: Button = %MuteButton
+@onready var volume_slider: HSlider = %VolumeSlider
+@onready var help_button: Button = %HelpButton
+@onready var help_overlay: Control = %HelpOverlay
+@onready var help_topics_bar: HFlowContainer = %HelpTopics
+@onready var help_text: RichTextLabel = %HelpText
+@onready var help_close_button: Button = %CloseButton
+@onready var save_button: Button = %SaveButton
+@onready var reset_button: Button = %ResetButton
+@onready var about_label: Label = %AboutLabel
+@onready var status_label: Label = %StatusLabel
+
+
+func _ready() -> void:
+	get_tree().auto_accept_quit = false
+
+	terminal.gui_input.connect(_on_terminal_input)  # tout clic sur le terminal = piratage
+	busted_overlay.gui_input.connect(_on_busted_input)
+	network_view.gui_input.connect(_on_network_gui_input)
+	continue_button.pressed.connect(_on_continue_pressed)
+	help_button.pressed.connect(_open_help)
+	help_close_button.pressed.connect(_close_help)
+	mute_button.pressed.connect(_on_mute_pressed)
+	_build_help_topics()
+	tabs.set_tab_title(0, "Générateurs")
+	tabs.set_tab_title(1, "Augmentations")
+	tabs.set_tab_title(2, "Programmes")
+	tabs.set_tab_title(3, "Réseau")
+	save_button.pressed.connect(_on_save_pressed)
+	reset_button.pressed.connect(_on_reset_pressed)
+	about_label.text = "v%s · © %s %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR]
+	about_label.tooltip_text = "Cyber Increment v%s\n© %s %s\nLicence : %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE]
+	prestige_button.pressed.connect(_on_prestige_pressed)
+	prestige_confirm.confirmed.connect(_do_prestige)
+	op_button.pressed.connect(_on_operation_pressed)
+	zeroday_button.pressed.connect(_on_zeroday_pressed)
+
+	cooldown_bar.max_value = OP_COOLDOWN
+	trace_bar.max_value = TRACE_MAX
+	logo_icon.texture = load("res://assets/icons/ai-logo.svg")
+	fragment_icon.texture = load("res://assets/icons/fragment.svg")
+	zeroday_button.visible = false
+	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
+	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
+	event_spawn_timer = randf_range(EVENT_SPAWN_MIN, EVENT_SPAWN_MAX)
+
+	_build_generator_rows()
+	_build_unlock_rows()
+	_build_item_rows()
+	_build_daemon_buttons()
+	_build_daemon_rows()
+	_node_style_owned = _make_node_style(Color(0.0, 0.15, 0.14, 0.95), Color(0, 0.9, 0.82))
+	_node_style_hack = _make_node_style(Color(0.16, 0.02, 0.1, 0.95), Color(1, 0.16, 0.62))
+	_node_style_locked = _make_node_style(Color(0.06, 0.08, 0.09, 0.9), Color(0.25, 0.3, 0.3))
+	_regenerate_network()
+	load_game()
+	_setup_autosave()
+	_seed_terminal()
+	_pick_new_command()
+	_apply_gating()
+	_setup_audio()
+	_update_display()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		save_game()
+		get_tree().quit()
+
+
+func _build_generator_rows() -> void:
+	for i in generators.size():
+		var gen: Dictionary = generators[i]
+		var row := GeneratorRowScene.instantiate() as GeneratorRow
+		gen_container.add_child(row)
+		row.setup(i)
+		row.set_icon(load(gen.icon) as Texture2D, Color(0, 0.9, 0.82))  # cyan
+		row.buy_requested.connect(_on_gen_buy)
+		gen_rows.append(row)
+
+
+func _build_item_rows() -> void:
+	for i in items.size():
+		var it: Dictionary = items[i]
+		var row := ItemRowScene.instantiate() as ItemRow
+		shop_container.add_child(row)
+		row.setup(i)
+		row.set_icon(load(it.icon) as Texture2D, _category_color(it.category))
+		row.buy_requested.connect(_on_item_buy)
+		item_rows.append(row)
+
+
+# Couleur néon associée à chaque catégorie d'item.
+func _category_color(category: String) -> Color:
+	match category:
+		"PUISSANCE":  return Color(0, 0.9, 0.82)      # cyan
+		"EFFICACITE": return Color(0.4, 1.0, 0.6)     # vert
+		"VARIETE":    return Color(1, 0.16, 0.62)     # magenta
+	return Color(1, 1, 1)
+
+
+# ---------------------------------------------------------------------------
+# DÉBLOCAGE PROGRESSIF (onboarding)
+# ---------------------------------------------------------------------------
+
+# Applique la visibilité des mécaniques selon l'état de déblocage.
+func _apply_gating() -> void:
+	tabs.set_tab_hidden(1, not unlocked.augment)
+	tabs.set_tab_hidden(2, not unlocked.daemons)
+	tabs.set_tab_hidden(3, not unlocked.network)
+	daemons_panel.visible = unlocked.daemons
+	var ops: bool = unlocked.operations
+	op_button.visible = ops
+	cooldown_bar.visible = ops
+	ops_title.visible = ops
+	ops_desc.visible = ops
+
+
+func _unlock_feature(feature: String, announce_name: String, help: String) -> void:
+	unlocked[feature] = true
+	_apply_gating()
+	_play_sfx("unlock")
+	_show_toast("DÉBLOQUÉ : %s" % announce_name, help, Color(0, 0.9, 0.82), 4.0)
+
+
+# Entrées "mystère" de la boutique (en haut de l'onglet Augmentations).
+func _build_unlock_rows() -> void:
+	for i in unlocks.size():
+		var row := ItemRowScene.instantiate() as ItemRow
+		shop_container.add_child(row)
+		row.setup(i)
+		row.set_icon(load("res://assets/icons/circuitry.svg") as Texture2D, Color(1, 0.55, 0.2))
+		row.buy_requested.connect(_on_unlock_buy)
+		unlock_rows.append(row)
+
+
+func _on_unlock_buy(index: int) -> void:
+	var u: Dictionary = unlocks[index]
+	if u.owned:
+		return
+	if fragments < u.cost:
+		_set_status("Pas assez de Fragments (%d requis)." % int(u.cost))
+		return
+	fragments -= u.cost                 # dépense (ne touche pas au total cumulé)
+	u.owned = true
+	_unlock_feature(u.feature, u.name, u.help)
+	_update_display()
+
+
+func _refresh_unlock_row(i: int) -> void:
+	var u: Dictionary = unlocks[i]
+	var row: ItemRow = unlock_rows[i]
+	# Apparaît seulement à partir du seuil, et disparaît une fois débloquée.
+	row.visible = (total_fragments_earned >= u.reveal) and not u.owned
+	if not row.visible:
+		return
+	row.refresh("[ ACCÈS VERROUILLÉ ]", "Débloque une capacité inconnue…", "Débloquer — %d Frag" % int(u.cost), fragments >= u.cost)
+
+
+func _owned_unlock_ids() -> Array:
+	var ids := []
+	for u in unlocks:
+		if u.owned:
+			ids.append(u.id)
+	return ids
+
+
+# ---------------------------------------------------------------------------
+# AIDE (P3)
+# ---------------------------------------------------------------------------
+
+func _build_help_topics() -> void:
+	for i in help_topics.size():
+		var btn := Button.new()
+		btn.text = help_topics[i].label
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.add_theme_font_size_override("font_size", 12)
+		btn.pressed.connect(_show_help_topic.bind(i))
+		help_topics_bar.add_child(btn)
+		help_buttons.append(btn)
+
+
+func _open_help() -> void:
+	# On n'affiche que les thèmes des mécaniques débloquées (pas de spoiler).
+	var first := -1
+	for i in help_topics.size():
+		var gate: String = help_topics[i].gate
+		var vis: bool = gate == "" or bool(unlocked.get(gate, false))
+		help_buttons[i].visible = vis
+		if vis and first < 0:
+			first = i
+	if first >= 0:
+		_show_help_topic(first)
+	help_overlay.visible = true
+	help_overlay.modulate.a = 0.0
+	create_tween().tween_property(help_overlay, "modulate:a", 1.0, 0.15)
+
+
+func _show_help_topic(i: int) -> void:
+	var t: Dictionary = help_topics[i]
+	help_text.text = "[color=#00e6d9]%s[/color]\n\n%s" % [t.title, t.text]
+
+
+func _close_help() -> void:
+	var tw := create_tween()
+	tw.tween_property(help_overlay, "modulate:a", 0.0, 0.2)
+	tw.tween_callback(func() -> void: help_overlay.visible = false)
+
+
+# ---------------------------------------------------------------------------
+# AUDIO
+# ---------------------------------------------------------------------------
+
+func _setup_audio() -> void:
+	for k in SFX_FILES:
+		_sfx_streams[k] = load(SFX_FILES[k])
+	# Un petit pool de lecteurs pour permettre le chevauchement (frappe rapide).
+	for i in 8:
+		var p := AudioStreamPlayer.new()
+		add_child(p)
+		_sfx_players.append(p)
+	# Musique d'ambiance en boucle.
+	_music_player = AudioStreamPlayer.new()
+	add_child(_music_player)
+	var amb = load("res://assets/audio/ambient.wav")
+	if amb is AudioStreamWAV:
+		amb.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		amb.loop_begin = 0
+		amb.loop_end = amb.data.size() / 2   # 16-bit mono : 2 octets/échantillon
+	_music_player.stream = amb
+	_music_player.volume_db = -16.0
+	_music_player.play()
+	# On règle le slider AVANT de connecter (pour ne pas jouer un bip au démarrage).
+	volume_slider.value = sfx_volume
+	volume_slider.value_changed.connect(_on_volume_changed)
+	_apply_mute()
+
+
+func _on_volume_changed(v: float) -> void:
+	sfx_volume = v
+	_play_sfx("key")                    # petit bip témoin pour entendre le niveau
+
+
+func _play_sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
+	if muted:
+		return
+	var st = _sfx_streams.get(name)
+	if st == null:
+		return
+	var p := _sfx_players[_sfx_idx]
+	_sfx_idx = (_sfx_idx + 1) % _sfx_players.size()
+	p.stream = st
+	p.volume_db = vol_db + linear_to_db(maxf(sfx_volume, 0.001))
+	p.pitch_scale = pitch
+	p.play()
+
+
+# Tonalité de l'achat : montée LINÉAIRE selon le nombre déjà acquis (gamme ascendante
+# qui reboucle tous les 12 crans pour rester agréable). Utilisé pour items/daemons/réseau.
+func _buy_pitch_step(n: int) -> float:
+	return 1.0 + float(n % 12) * 0.07
+
+
+# Tonalité d'achat des GÉNÉRATEURS : fonction LINÉAIRE de la production totale (o/s).
+# 1 o/s -> x1.0 ; 30000 o/s -> x2.5 ; au-delà plafonné à x2.5.
+func _prod_pitch() -> float:
+	return clampf(1.0 + (production_per_second() - 1.0) * (1.5 / 29999.0), 1.0, 2.5)
+
+
+func _network_owned_count() -> int:
+	var c: int = 0
+	for nn in network_nodes:
+		if nn.owned:
+			c += 1
+	return c
+
+
+func _on_mute_pressed() -> void:
+	muted = not muted
+	_apply_mute()
+
+
+func _apply_mute() -> void:
+	if _music_player != null:
+		_music_player.stream_paused = muted
+	mute_button.text = "SON: OFF" if muted else "SON: ON"
+
+
+# ---------------------------------------------------------------------------
+# DAEMONS (capacités actives)
+# ---------------------------------------------------------------------------
+
+func _build_daemon_buttons() -> void:
+	for i in daemons.size():
+		var d: Dictionary = daemons[i]
+		var btn := Button.new()
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.tooltip_text = _daemon_desc(d)
+		btn.pressed.connect(_activate_daemon.bind(i))   # bind : passe l'index au callback
+		daemons_bar.add_child(btn)
+		daemon_buttons.append(btn)
+
+
+func _activate_daemon(index: int) -> void:
+	var d: Dictionary = daemons[index]
+
+	# Daemon "à usage payant" (GHOST) : chaque activation coûte des Fragments.
+	if d.get("pay_per_use", false):
+		var use_cost := int(d.use_cost)
+		if fragments < use_cost:
+			_set_status("Pas assez de Fragments pour %s (%d requis)." % [d.name, use_cost])
+			return
+		fragments -= use_cost
+		trace = 0.0
+		if intrusion_active:
+			_escape_intrusion()
+		_set_status("GHOST : traçage effacé (-%d Fragment)." % use_cost)
+		_flash(Color(0, 0.9, 0.82), 0.25)
+		_update_display()
+		return
+
+	# Daemons classiques (débloqués + cooldown).
+	if d.level < 1:
+		return                                          # verrouillé
+	if d.cd_remaining > 0.0 or d.active_remaining > 0.0:
+		return                                          # pas prêt
+	d.cd_remaining = _daemon_cooldown(d)
+	match d.id:
+		"autopwn":
+			d.active_remaining = _daemon_duration(d)
+			_set_status("AUTOPWN actif : toute touche valide la commande !")
+		"overclock":
+			d.active_remaining = _daemon_duration(d)
+			_set_status("OVERCLOCK : production x%d !" % int(OVERCLOCK_MULT))
+	_flash(Color(0, 0.9, 0.82), 0.25)
+	_update_display()
+
+
+# Un daemon "à durée" est-il actuellement actif ?
+func _daemon_active(id: String) -> bool:
+	for d in daemons:
+		if d.id == id:
+			return d.active_remaining > 0.0
+	return false
+
+
+# Valeurs effectives selon le niveau (cooldown baisse, durée monte).
+func _daemon_cooldown(d: Dictionary) -> float:
+	return maxf(15.0, d.base_cooldown * pow(0.9, maxi(0, d.level - 1)))
+
+
+func _daemon_duration(d: Dictionary) -> float:
+	return d.base_duration + maxi(0, d.level - 1) * d.duration_step
+
+
+# Coût du prochain achat (déblocage si level 0, sinon amélioration) EN FRAGMENTS.
+func daemon_cost(d: Dictionary) -> int:
+	return int(ceil(d.frag_base * pow(d.frag_growth, d.level)))
+
+
+# --- Onglet PROGRAMMES : déblocage / amélioration en Fragments ---
+
+func _build_daemon_rows() -> void:
+	for i in daemons.size():
+		var d: Dictionary = daemons[i]
+		var row := ItemRowScene.instantiate() as ItemRow
+		daemon_container.add_child(row)
+		row.setup(i)
+		row.set_icon(load(d.icon) as Texture2D, Color(0.4, 0.8, 1.0))  # bleu "programme"
+		row.buy_requested.connect(_on_daemon_buy)
+		# GHOST (usage payant) ne se débloque pas : pas de ligne dans l'onglet Programmes.
+		row.visible = not d.get("pay_per_use", false)
+		daemon_rows.append(row)
+
+
+func _on_daemon_buy(index: int) -> void:
+	var d: Dictionary = daemons[index]
+	if d.level >= d.max_level:
+		return
+	var cost := daemon_cost(d)
+	if fragments >= cost:
+		fragments -= cost
+		d.level += 1
+		_play_sfx("buy", -3.0, _buy_pitch_step(d.level))
+		_set_status("%s : %s (Nv %d)" % [d.name, "débloqué" if d.level == 1 else "amélioré", d.level])
+	else:
+		_set_status("Pas assez de Fragments pour %s." % d.name)
+	_update_display()
+
+
+func _daemon_desc(d: Dictionary) -> String:
+	var cd := int(_daemon_cooldown(d))
+	match d.id:
+		"autopwn":   return "Valide toutes les touches %d s   —   recharge %d s" % [int(_daemon_duration(d)), cd]
+		"ghost":     return "Efface le traçage / annule une intrusion   —   %d Fragment / usage" % int(d.use_cost)
+		"overclock": return "Production x%d pendant %d s   —   recharge %d s" % [int(OVERCLOCK_MULT), int(_daemon_duration(d)), cd]
+	return ""
+
+
+func _refresh_daemon_row(i: int) -> void:
+	var d: Dictionary = daemons[i]
+	if d.get("pay_per_use", false):
+		return                                          # pas de ligne d'amélioration pour GHOST
+	var title := "%s   (verrouillé)" % d.name if d.level == 0 else "%s   Nv %d/%d" % [d.name, d.level, d.max_level]
+	var maxed: bool = d.level >= d.max_level
+	var cost := daemon_cost(d)
+	var button_text := "MAX"
+	if not maxed:
+		button_text = "Débloquer — %d Frag" % cost if d.level == 0 else "Améliorer — %d Frag" % cost
+	var buyable := (not maxed) and fragments >= cost
+	daemon_rows[i].refresh(title, _daemon_desc(d), button_text, buyable)
+
+
+func _setup_autosave() -> void:
+	var timer := Timer.new()
+	timer.wait_time = 15.0
+	timer.autostart = true
+	timer.timeout.connect(func() -> void: save_game())
+	add_child(timer)
+
+
+func _process(delta: float) -> void:
+	play_time += delta
+	_earn(production_per_second() * delta)
+	# Auto-clic : chaque "clic auto" vaut autant qu'un clic manuel.
+	var auto_rate := item_autoclick_rate()
+	if auto_rate > 0.0:
+		_earn(click_value() * auto_rate * delta)
+	_update_timers(delta)
+	_update_display()
+
+
+# Fait avancer tous les compteurs de temps de la couche "hack à risque".
+func _update_timers(delta: float) -> void:
+	# Le combo de frappe retombe si on arrête de taper.
+	if combo > 0:
+		combo_timer += delta
+		if combo_timer >= COMBO_DECAY:
+			combo = 0
+			combo_timer = 0.0
+
+	# Cooldown des opérations.
+	if op_cooldown_remaining > 0.0:
+		op_cooldown_remaining = maxf(0.0, op_cooldown_remaining - delta)
+
+	# La jauge de traçage redescend doucement (sauf malus actif ou intrusion en cours).
+	if trace > 0.0 and malus_remaining <= 0.0 and not intrusion_active:
+		trace = maxf(0.0, trace - TRACE_DECAY * delta)
+
+	# Compte à rebours de la contre-mesure : si le temps s'écoule, l'intrusion réussit.
+	if intrusion_active:
+		intrusion_timer -= delta
+		if intrusion_timer <= 0.0:
+			_fail_intrusion()
+
+	# Cooldowns et durées d'effet des daemons.
+	for d in daemons:
+		if d.cd_remaining > 0.0:
+			d.cd_remaining = maxf(0.0, d.cd_remaining - delta)
+		if d.active_remaining > 0.0:
+			d.active_remaining = maxf(0.0, d.active_remaining - delta)
+
+	# Événements aléatoires (une fois le jeu un peu avancé : après le 1er prestige).
+	if unlocked.augment:
+		if event_active:
+			event_timer -= delta
+			if event_timer <= 0.0:
+				_end_event()
+		elif not boss_active:
+			# Pas d'événement pendant un boss : on GÈLE le timer (pas de décompte) pour
+			# ne pas cumuler les pressions, ni faire pop un événement pile à la fin du boss.
+			event_spawn_timer -= delta
+			if event_spawn_timer <= 0.0:
+				_start_random_event()
+
+	# Contre-attaque du firewall (production /2 temporaire).
+	if firewall_malus_remaining > 0.0:
+		firewall_malus_remaining = maxf(0.0, firewall_malus_remaining - delta)
+
+	# Boss firewall : apparition périodique, puis compte à rebours pour le briser.
+	if boss_active:
+		boss_timer -= delta
+		if boss_timer <= 0.0:
+			_fail_boss()
+	elif not event_active:
+		# Symétrique : on ne lance pas de boss pendant un événement (timer gelé aussi).
+		boss_spawn_timer -= delta
+		if boss_spawn_timer <= 0.0 and unlocked.operations:
+			_start_boss()
+
+	# Malus "TRACÉ" et buff "faille" : on décompte leur durée.
+	if malus_remaining > 0.0:
+		malus_remaining = maxf(0.0, malus_remaining - delta)
+	if zeroday_buff_remaining > 0.0:
+		zeroday_buff_remaining = maxf(0.0, zeroday_buff_remaining - delta)
+
+	# Gestion des failles zero-day.
+	if zeroday_window_remaining > 0.0:
+		# Une faille est affichée : le joueur a un temps limité pour cliquer.
+		zeroday_window_remaining -= delta
+		if zeroday_window_remaining <= 0.0:
+			zeroday_window_remaining = 0.0
+			zeroday_button.visible = false
+			zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
+			_set_status("Faille zero-day manquée.")
+	else:
+		# Aucune faille : on attend la prochaine apparition (si Opérations débloquées).
+		zeroday_spawn_timer -= delta
+		if zeroday_spawn_timer <= 0.0 and unlocked.operations:
+			_spawn_zeroday()
+
+
+# Multiplicateur temporaire venant des événements (faille et/ou malus de traçage).
+func event_multiplier() -> float:
+	var m: float = 1.0
+	if zeroday_buff_remaining > 0.0:
+		m *= ZERODAY_MULT
+	if malus_remaining > 0.0:
+		m *= MALUS_MULT
+	if _daemon_active("overclock"):
+		m *= OVERCLOCK_MULT
+	if firewall_malus_remaining > 0.0:
+		m *= FIREWALL_MALUS_MULT
+	if event_active and event_id == "surcharge":
+		m *= EVENT_SURCHARGE_MULT
+	return m
+
+
+func _earn(amount: float) -> void:
+	data += amount
+	run_earned += amount
+
+
+# Point de passage unique pour tout gain de Fragments (suit l'objectif de fin).
+func _gain_fragments(n: int) -> void:
+	fragments += n
+	total_fragments_earned += n
+
+
+# ---------------------------------------------------------------------------
+# EFFETS DES ITEMS (chaque fonction agrège tous les items concernés)
+# ---------------------------------------------------------------------------
+
+func item_prod_mult() -> float:
+	var m: float = 1.0
+	var distinct := _distinct_generators_owned()
+	for it in items:
+		if it.effect == "prod_mult":
+			m += it.level * it.value
+		elif it.effect == "synergy":
+			m += it.level * it.value * distinct   # récompense la diversité
+	return m
+
+
+func item_click_mult() -> float:
+	var m: float = 1.0
+	for it in items:
+		if it.effect == "click_mult":
+			m += it.level * it.value
+	return m
+
+
+# Facteur multiplicatif sur le coût des générateurs (jamais sous 20 %).
+func item_cost_factor() -> float:
+	var f: float = 1.0
+	for it in items:
+		if it.effect == "cost_reduc":
+			f *= pow(1.0 - it.value, it.level)
+	return maxf(f, 0.2)
+
+
+func item_autoclick_rate() -> float:
+	var r: float = 0.0
+	for it in items:
+		if it.effect == "autoclick":
+			r += it.level * it.value
+	return r
+
+
+func _distinct_generators_owned() -> int:
+	var n: int = 0
+	for gen in generators:
+		if gen.count > 0:
+			n += 1
+	return n
+
+
+# ---------------------------------------------------------------------------
+# NOMBRES DU JEU
+# ---------------------------------------------------------------------------
+
+func prestige_multiplier() -> float:
+	return 1.0 + fragments * FRAGMENT_BONUS
+
+
+# Valeur d'un clic (manuel ou auto), tous bonus inclus.
+func click_value() -> float:
+	return per_click * prestige_multiplier() * item_click_mult() * network_click_mult()
+
+
+func production_per_second() -> float:
+	var base: float = 0.0
+	for gen in generators:
+		base += gen.count * gen.production
+	return base * prestige_multiplier() * item_prod_mult() * event_multiplier() * network_prod_mult() * combo_prod_mult()
+
+
+func cost_of(gen: Dictionary) -> float:
+	return ceil(gen.base_cost * pow(gen.cost_growth, gen.count) * item_cost_factor() * network_cost_factor())
+
+
+func item_cost(it: Dictionary) -> int:
+	return int(ceil(it.base_cost * pow(it.cost_growth, it.level)))
+
+
+func pending_fragments() -> int:
+	return int(floor(sqrt(run_earned / PRESTIGE_DIV)))
+
+
+# Données à accumuler dans la run pour atteindre `n` fragments.
+# Inverse de la formule pending : run_earned = n² × PRESTIGE_DIV.
+func fragments_threshold(n: int) -> float:
+	return float(n) * n * PRESTIGE_DIV
+
+
+# ---------------------------------------------------------------------------
+# ACTIONS
+# ---------------------------------------------------------------------------
+
+# Tout clic gauche sur le terminal déclenche un piratage "manuel" (+1).
+func _on_terminal_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_do_hack(terminal.global_position + event.position)
+
+
+# --- Mini-jeu de frappe -----------------------------------------------------
+
+# _input() reçoit TOUTES les entrées. On y capte les touches du clavier.
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if prestige_confirm.visible or busted_overlay.visible or victory_overlay.visible or help_overlay.visible:
+		return                              # clavier en pause pendant confirmation / écrans pleins
+	var u: int = event.unicode
+	if u < 32:                              # on ignore les touches non imprimables (Entrée, Tab...)
+		return
+	_type_char(String.chr(u))
+	# On "consomme" la touche pour qu'elle n'active pas un bouton ayant le focus.
+	get_viewport().set_input_as_handled()
+
+
+func _type_char(ch: String) -> void:
+	if current_command.is_empty():
+		return
+	var expected := current_command.substr(typed_len, 1)
+	if _daemon_active("autopwn"):
+		ch = expected                       # AUTOPWN : n'importe quelle touche est validée
+	if ch == expected:
+		typed_len += 1
+		combo_timer = 0.0
+		_play_sfx("key", -9.0)
+		_earn(click_value())                # chaque bonne lettre vaut un clic
+		_pop(data_label)
+		if typed_len >= current_command.length():
+			if intrusion_active:
+				_escape_intrusion()         # on a tapé la commande de purge à temps
+			elif final_command_active:
+				_awaken_ai()                # commande d'éveil complétée : victoire !
+			else:
+				_complete_command()
+		_update_display()
+	elif intrusion_active:
+		# Pendant l'alerte : une faute grignote le temps restant (pression accrue).
+		_shake(command_label)
+		_play_sfx("key_wrong", -5.0)
+		intrusion_timer = maxf(0.0, intrusion_timer - 0.5)
+		_update_display()
+	else:
+		# Mauvaise touche : on casse le combo et on fait monter le traçage.
+		_shake(command_label)
+		_play_sfx("key_wrong", -5.0)
+		if boss_active and boss_type.get("gimmick", "") == "typo_heal":
+			boss_hp = minf(boss_max_hp, boss_hp + BOSS_TYPO_HEAL)
+		if combo > 0:
+			_set_status("Frappe ratée ! Combo perdu.")
+		combo = 0
+		combo_timer = 0.0
+		trace = minf(TRACE_MAX, trace + WRONG_KEY_TRACE)
+		if trace >= TRACE_MAX:
+			_start_intrusion()
+		_update_display()
+
+
+func _complete_command() -> void:
+	# Bonus de fin : proportionnel à la longueur de la commande et au combo actuel.
+	var bonus := click_value() * current_command.length() * _combo_multiplier()
+	var rare := current_is_rare
+	if rare:
+		bonus *= RARE_BONUS_MULT
+		combo += 2                          # une commande rare vaut deux paliers de combo
+	else:
+		combo += 1
+	_earn(bonus)
+	combo_timer = 0.0
+
+	var tag := "[color=#ffcf40][RARE] [/color]" if rare else ""
+	var line := "[color=#7fd8d0]%sexec: %s[/color]  [color=#5dffa0]+%d o[/color]" % [tag, current_command, int(bonus)]
+	term_lines.append(line)
+	if term_lines.size() > 40:
+		term_lines.pop_front()
+	terminal_log.text = "\n".join(PackedStringArray(term_lines))
+
+	var col := Color(1, 0.81, 0.25) if rare else Color(0.4, 1.0, 0.5)
+	_spawn_floating_text("+%d o  COMBO x%d" % [int(bonus), combo], _center_of(terminal), col)
+	_burst_particles(_center_of(terminal))
+	_flash(col, 0.28 if rare else 0.18)
+	_play_sfx("rare" if rare else "command", -3.0)
+
+	# Dégâts au boss, modulés par son gimmick.
+	if boss_active:
+		var g: String = boss_type.get("gimmick", "")
+		var dmg: float = float(current_command.length())
+		if g == "rare_only" and not rare:
+			dmg *= 0.2                       # EDR : les commandes normales pèsent peu
+		elif g == "throttle":
+			dmg = BOSS_THROTTLE_DMG          # AntiDDOS : dégâts fixes, le volume compte
+		boss_hp = maxf(0.0, boss_hp - dmg)
+		if boss_hp <= 0.0:
+			_defeat_boss()
+
+	_pick_new_command()
+
+
+func _combo_multiplier() -> float:
+	return 1.0 + combo * COMBO_STEP
+
+
+# Bonus de PRODUCTION tant que le combo tient : taper activement dope l'économie.
+func combo_prod_mult() -> float:
+	return 1.0 + mini(combo, COMBO_PROD_CAP) * COMBO_PROD_STEP
+
+
+# Tire la prochaine commande. Plus le combo est haut, plus une commande RARE
+# (longue, très rémunératrice) a de chances d'apparaître.
+func _pick_new_command() -> void:
+	# Objectif atteint et pas encore gagné : on impose la commande d'ÉVEIL.
+	if not has_won and total_fragments_earned >= AWAKEN_TARGET:
+		current_command = AWAKEN_COMMAND
+		current_is_rare = false
+		final_command_active = true
+		typed_len = 0
+		return
+	final_command_active = false
+	var rare_chance := clampf(0.15 + combo * 0.04, 0.0, 0.6)
+	if combo >= RARE_COMBO_THRESHOLD and randf() < rare_chance:
+		current_command = COMMANDS_RARE[randi() % COMMANDS_RARE.size()]
+		current_is_rare = true
+	else:
+		current_command = COMMANDS[randi() % COMMANDS.size()]
+		current_is_rare = false
+	typed_len = 0
+
+
+# Affiche la commande : tapé en vert, prochain caractère surligné, reste en gris.
+func _update_typing_ui() -> void:
+	var done := current_command.substr(0, typed_len)
+	var rest := current_command.substr(typed_len)
+	var next_ch := rest.substr(0, 1)
+	var after := rest.substr(1) if rest.length() > 1 else ""
+
+	# Mode ALERTE : commande de purge en rouge/orange + compte à rebours.
+	if intrusion_active:
+		command_label.text = "[color=#ff3030][ALERTE] [/color][color=#ff8a3a]%s[/color][bgcolor=#ff3030][color=#0a0e14]%s[/color][/bgcolor][color=#7a4a4a]%s[/color]" % [done, next_ch, after]
+		term_hint.text = "INTRUSION — échappe-toi en %.1f s" % intrusion_timer
+		term_hint.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+		return
+
+	# Mode ÉVEIL : la commande finale, en doré.
+	if final_command_active:
+		command_label.text = "[color=#ffcf40]// ÉVEIL // [/color][color=#5dffa0]%s[/color][bgcolor=#ffcf40][color=#0a0e14]%s[/color][/bgcolor][color=#6a6040]%s[/color]" % [done, next_ch, after]
+		term_hint.text = "Tape la commande d'ÉVEIL pour atteindre la SINGULARITÉ"
+		term_hint.add_theme_color_override("font_color", Color(1, 0.81, 0.25))
+		return
+
+	# Brouillage : événement INSTABILITÉ ou boss CHIFFREMENT SSL.
+	if (event_active and event_id == "instabilite") or (boss_active and boss_type.get("gimmick", "") == "glitch"):
+		var s := "[color=#5dffa0]%s[/color]" % done
+		for j in range(typed_len, current_command.length()):
+			var real := current_command.substr(j, 1)
+			var glitched := _glitch_hash(j) < 4
+			var shown := _glitch_char(j) if glitched else real
+			if j == typed_len:
+				s += "[bgcolor=#ff2a99][color=#0a0e14]%s[/color][/bgcolor]" % shown
+			elif glitched:
+				s += "[color=#ff5a46]%s[/color]" % shown
+			else:
+				s += "[color=#4d6b68]%s[/color]" % shown
+		command_label.text = s
+		term_hint.text = "INSTABILITÉ — signal brouillé (%.0f s)" % event_timer
+		term_hint.add_theme_color_override("font_color", Color(1, 0.35, 0.3))
+		return
+
+	var prefix := "[color=#ffcf40][RARE] [/color]" if current_is_rare else ""
+	command_label.text = "%s[color=#5dffa0]%s[/color][bgcolor=#ff2a99][color=#0a0e14]%s[/color][/bgcolor][color=#4d6b68]%s[/color]" % [prefix, done, next_ch, after]
+	if combo > 0:
+		term_hint.text = "COMBO x%d   —   PRODUCTION +%d%%" % [combo, int((combo_prod_mult() - 1.0) * 100)]
+		term_hint.add_theme_color_override("font_color", Color(1, 0.16, 0.62))
+	else:
+		term_hint.text = "Tape la commande ci-dessus   (ou clique = +1)"
+		term_hint.add_theme_color_override("font_color", Color(0.5, 0.62, 0.6))
+
+
+# ---------------------------------------------------------------------------
+# FIN DE PARTIE : éveil de l'IA (Singularité)
+# ---------------------------------------------------------------------------
+
+func _awaken_ai() -> void:
+	has_won = true
+	final_command_active = false
+	_flash(Color(0, 0.9, 0.82), 0.8)
+	_play_sfx("victory")
+	_burst_particles(_center_of(terminal))
+	save_game()
+	_show_victory()
+	_pick_new_command()                 # repasse en commandes normales (mode libre)
+
+
+func _show_victory() -> void:
+	var mins := int(play_time / 60.0)
+	victory_stats.text = "Fragments d'IA cumulés : %d\nCompilations (prestiges) : %d\nTemps de jeu : %d min" % [total_fragments_earned, prestige_count, mins]
+	victory_overlay.visible = true
+	victory_overlay.modulate.a = 0.0
+	await get_tree().process_frame
+	victory_panel.pivot_offset = victory_panel.size / 2.0
+	victory_panel.scale = Vector2(0.7, 0.7)
+	var t := create_tween().set_parallel(true)
+	t.tween_property(victory_overlay, "modulate:a", 1.0, 0.35)
+	t.tween_property(victory_panel, "scale", Vector2(1.05, 1.05), 0.45) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.set_parallel(false)
+	t.tween_property(victory_panel, "scale", Vector2(1, 1), 0.15)
+
+
+func _on_continue_pressed() -> void:
+	var t := create_tween()
+	t.tween_property(victory_overlay, "modulate:a", 0.0, 0.3)
+	t.tween_callback(func() -> void: victory_overlay.visible = false)
+
+
+# ---------------------------------------------------------------------------
+# ÉVÉNEMENTS ALÉATOIRES (P4)
+# ---------------------------------------------------------------------------
+
+func _start_random_event() -> void:
+	event_id = ["instabilite", "surcharge"][randi() % 2]
+	event_active = true
+	event_timer = EVENT_DURATION
+	_flash(Color(1, 0.35, 0.2), 0.3)
+	match event_id:
+		"instabilite":
+			_play_sfx("glitch")
+			_show_toast("INSTABILITÉ CONNEXION", "La commande est brouillée pendant %d s — tape à l'instinct !" % int(EVENT_DURATION), Color(1, 0.35, 0.3), 3.0)
+		"surcharge":
+			_play_sfx("overload")
+			_show_toast("SURCHARGE RÉSEAU", "Production réduite pendant %d s." % int(EVENT_DURATION), Color(1, 0.6, 0.2), 3.0)
+
+
+func _end_event() -> void:
+	event_active = false
+	event_id = ""
+	event_spawn_timer = randf_range(EVENT_SPAWN_MIN, EVENT_SPAWN_MAX)
+	_play_sfx("stable", -4.0)
+	_show_toast("RÉSEAU STABILISÉ", "Retour à la normale.", Color(0, 0.9, 0.82), 2.0)
+
+
+# Brouillage déterministe qui change ~8x/seconde (lettres qui clignotent).
+func _glitch_hash(j: int) -> int:
+	var slot := int(Time.get_ticks_msec() / 120)
+	return abs(hash("%d_%d" % [j, slot])) % 10
+
+
+func _glitch_char(j: int) -> String:
+	var slot := int(Time.get_ticks_msec() / 120)
+	var idx: int = abs(hash("%d x %d" % [j, slot])) % GLITCH_CHARS.length()
+	return GLITCH_CHARS.substr(idx, 1)
+
+
+func _do_hack(at_pos: Vector2) -> void:
+	var gain := click_value()
+	_earn(gain)
+	_add_terminal_line(gain)
+	# Feedback visuel : +X flottant, pop du compteur, jet de particules.
+	_spawn_floating_text("+%d o" % int(gain), at_pos, Color(0, 0.9, 0.82))
+	_pop(data_label)
+	_burst_particles(at_pos)
+	_update_display()
+
+
+# Ajoute une ligne "hacker" au log du terminal (et le fait défiler).
+func _add_terminal_line(gain: float) -> void:
+	var flavor: String = HACK_LINES[randi() % HACK_LINES.size()]
+	var line := "[color=#7fd8d0]%s[/color]  [color=#5dffa0]+%d o[/color]" % [flavor, int(gain)]
+	term_lines.append(line)
+	if term_lines.size() > 40:
+		term_lines.pop_front()
+	terminal_log.text = "\n".join(PackedStringArray(term_lines))
+
+
+func _seed_terminal() -> void:
+	term_lines = [
+		"[color=#5c807c]system: nexus online[/color]",
+		"[color=#5c807c]link: tunnel chiffré établi[/color]",
+		"[color=#5c807c]awaiting input...[/color]",
+	]
+	terminal_log.text = "\n".join(PackedStringArray(term_lines))
+
+
+func _on_gen_buy(index: int) -> void:
+	var gen: Dictionary = generators[index]
+	var cost := cost_of(gen)
+	if data >= cost:
+		data -= cost
+		gen.count += 1
+		_play_sfx("buy", -4.0, _prod_pitch())
+	_update_display()
+
+
+func _on_item_buy(index: int) -> void:
+	var it: Dictionary = items[index]
+	if it.level >= it.max_level:
+		return
+	var cost := item_cost(it)
+	if fragments >= cost:
+		fragments -= cost
+		it.level += 1
+		_play_sfx("buy", -3.0, _buy_pitch_step(it.level))
+		_set_status("Amélioré : %s (Nv %d)" % [it.name, it.level])
+	else:
+		_set_status("Pas assez de Fragments pour %s." % it.name)
+	_update_display()
+
+
+# --- Opérations à risque ----------------------------------------------------
+
+func _on_operation_pressed() -> void:
+	if op_cooldown_remaining > 0.0:
+		return
+	op_cooldown_remaining = OP_COOLDOWN
+	if randf() < OP_SUCCESS_CHANCE:
+		# Réussite : gain = X secondes de production (ou un plancher en début de partie).
+		var reward := maxf(production_per_second() * OP_REWARD_SECONDS, click_value() * OP_MIN_REWARD_CLICKS)
+		_earn(reward)
+		_set_status("Opération réussie : +%d o !" % int(reward))
+		_spawn_floating_text("+%d o" % int(reward), _center_of(op_button), Color(0.4, 1.0, 0.5))
+		_pop(data_label)
+		_burst_particles(_center_of(op_button))
+	else:
+		# Échec : la jauge de traçage monte.
+		trace = minf(TRACE_MAX, trace + TRACE_PER_FAIL)
+		_spawn_floating_text("ÉCHEC", _center_of(op_button), Color(1, 0.35, 0.3))
+		_shake(op_button)
+		if trace >= TRACE_MAX:
+			_start_intrusion()
+		else:
+			_set_status("Opération échouée : traçage +%d%%" % int(TRACE_PER_FAIL))
+	_update_display()
+
+
+# Déclenche l'alerte : le joueur doit taper la commande de purge à temps.
+func _start_intrusion() -> void:
+	if intrusion_active:
+		return
+	intrusion_active = true
+	intrusion_timer = INTRUSION_TIME
+	current_command = ESCAPE_COMMAND    # la commande à taper devient la purge
+	typed_len = 0
+	current_is_rare = false
+	combo = 0
+	_flash(Color(1, 0.15, 0.15), 0.45)
+	_play_sfx("alert")
+	_set_status("INTRUSION DÉTECTÉE ! Tape « %s » avant la fin du compte à rebours !" % ESCAPE_COMMAND)
+
+
+# Réussite : logs purgés, on évite complètement le malus.
+func _escape_intrusion() -> void:
+	intrusion_active = false
+	trace = 0.0
+	_flash(Color(0, 0.9, 0.82), 0.3)
+	_spawn_floating_text("ÉCHAPPÉ !", _center_of(terminal), Color(0.4, 1.0, 0.5))
+	_burst_particles(_center_of(terminal))
+	_set_status("Logs purgés — tu t'es échappé à temps !")
+	_pick_new_command()
+
+
+# Échec : le traçage aboutit. Sanction lourde : on PERD tous les octets accumulés,
+# en plus du ralentissement de production. Le traçage devient un vrai enjeu.
+func _fail_intrusion() -> void:
+	var lost := data                    # on mémorise ce qui est perdu AVANT d'effacer
+	intrusion_active = false
+	trace = 0.0
+	malus_remaining = MALUS_DURATION
+	data = 0.0                          # remise à zéro des Données (octets)
+	_show_busted(lost)
+	_pick_new_command()
+
+
+# Écran "TRACÉ" plein écran (façon BUSTED) : montre l'impact de l'échec.
+func _show_busted(lost: float) -> void:
+	busted_lost.text = "Données effacées : -%d o" % int(lost)
+	busted_malus.text = "Production divisée par %d pendant %d s" % [int(1.0 / MALUS_MULT), int(MALUS_DURATION)]
+	busted_overlay.visible = true
+	busted_overlay.modulate.a = 0.0
+	_flash(Color(1, 0.1, 0.1), 0.7)
+	_play_sfx("alert", 2.0)
+	_set_status("TRACÉ ! Données effacées.")
+
+	# On attend une frame pour que le panneau ait sa taille (pivot correct).
+	await get_tree().process_frame
+	busted_panel.pivot_offset = busted_panel.size / 2.0
+	busted_panel.scale = Vector2(0.7, 0.7)
+	var t := create_tween().set_parallel(true)
+	t.tween_property(busted_overlay, "modulate:a", 1.0, 0.15)
+	t.tween_property(busted_panel, "scale", Vector2(1.08, 1.08), 0.22) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.set_parallel(false)
+	t.tween_property(busted_panel, "scale", Vector2(1, 1), 0.12)
+	t.tween_callback(func() -> void: _shake(busted_panel))
+
+	# Auto-fermeture après quelques secondes (ou au clic).
+	get_tree().create_timer(5.0).timeout.connect(_hide_busted)
+
+
+func _hide_busted() -> void:
+	if not busted_overlay.visible:
+		return
+	var t := create_tween()
+	t.tween_property(busted_overlay, "modulate:a", 0.0, 0.3)
+	t.tween_callback(func() -> void: busted_overlay.visible = false)
+
+
+func _on_busted_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		_hide_busted()
+
+
+# Bandeau d'information non-bloquant (apparaît, reste ~duration s, disparaît).
+func _show_toast(title: String, message: String, color: Color, duration: float = 2.6) -> void:
+	toast_title.text = title
+	toast_title.add_theme_color_override("font_color", color)
+	toast_msg.text = message
+	toast.visible = true
+	toast.modulate.a = 0.0
+	toast.offset_top = 44.0
+	var t := create_tween().set_parallel(true)
+	t.tween_property(toast, "modulate:a", 1.0, 0.18)
+	t.tween_property(toast, "offset_top", 60.0, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	_toast_id += 1
+	var my_id := _toast_id
+	get_tree().create_timer(duration).timeout.connect(func() -> void: _hide_toast(my_id))
+
+
+func _hide_toast(id: int) -> void:
+	if id != _toast_id or not toast.visible:
+		return                              # un toast plus récent est apparu entre-temps
+	var t := create_tween()
+	t.tween_property(toast, "modulate:a", 0.0, 0.3)
+	t.tween_callback(func() -> void: toast.visible = false)
+
+
+# ---------------------------------------------------------------------------
+# BOSS FIREWALL
+# ---------------------------------------------------------------------------
+
+func _start_boss() -> void:
+	boss_type = BOSS_TYPES[randi() % BOSS_TYPES.size()]
+	boss_active = true
+	boss_max_hp = FIREWALL_BASE_HP * (1.0 + boss_level * FIREWALL_HP_GROWTH) * float(boss_type.hp_mult)
+	boss_hp = boss_max_hp
+	boss_timer = float(boss_type.time)
+	boss_panel.visible = true
+	boss_title.text = "/// %s ///" % boss_type.name
+	_flash(Color(1, 0.16, 0.62), 0.4)
+	_play_sfx("boss")
+	_show_toast(boss_type.name + " DÉTECTÉ", boss_type.desc, Color(1, 0.16, 0.62), 3.8)
+	_set_status("%s détecté ! %s" % [boss_type.name, boss_type.desc])
+
+
+func _defeat_boss() -> void:
+	boss_active = false
+	boss_panel.visible = false
+	boss_level += 1
+	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
+
+	# Butin = fraction de ta production ACTUELLE (donc dépend de TOUT : générateurs,
+	# prestige, items, buffs actifs) × difficulté du firewall × maîtrise au clavier (combo).
+	var level_mult := 1.0 + boss_level * FIREWALL_REWARD_LEVEL_STEP
+	var combo_mult := 1.0 + combo * FIREWALL_COMBO_STEP
+	var reward := maxf(production_per_second() * FIREWALL_REWARD_SECONDS, click_value() * 150.0) * level_mult * combo_mult
+	var frag_reward := 1 + int(boss_level / 2)   # les firewalls plus durs donnent plus de Fragments
+	_earn(reward)
+	_gain_fragments(frag_reward)
+
+	_flash(Color(0, 0.9, 0.82), 0.5)
+	_spawn_floating_text("FIREWALL BRISÉ !  +%d o  +%d Frag" % [int(reward), frag_reward], _center_of(terminal), Color(0.4, 1.0, 0.5))
+	_burst_particles(_center_of(terminal))
+	_show_toast("FIREWALL BRISÉ  (Nv %d)" % boss_level, "Butin : +%d o     •     +%d Fragment(s)" % [int(reward), frag_reward], Color(0.4, 1.0, 0.5), 3.0)
+	_set_status("Firewall Nv %d brisé ! +%d o, +%d Fragment(s)." % [boss_level, int(reward), frag_reward])
+
+
+func _fail_boss() -> void:
+	boss_active = false
+	boss_panel.visible = false
+	firewall_malus_remaining = FIREWALL_MALUS_DURATION
+	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
+	_flash(Color(1, 0.4, 0.2), 0.5)
+	_show_toast("FIREWALL NON BRISÉ", "Contre-attaque : production /%d pendant %d s" % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)], Color(1, 0.45, 0.3), 3.0)
+	_set_status("Firewall non brisé ! Contre-attaque : production /%d pendant %d s." % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)])
+
+
+# ---------------------------------------------------------------------------
+# RÉSEAU (carte de propagation)
+# ---------------------------------------------------------------------------
+
+# Régénère une carte fraîche (nouveau seed) + reconstruit l'affichage.
+func _regenerate_network() -> void:
+	network_seed = randi()
+	_generate_network()
+	_rebuild_network_view()
+
+
+# Génère network_nodes + network_connections de façon DÉTERMINISTE depuis le seed
+# (même seed => même carte, indispensable pour la sauvegarde de la run).
+func _generate_network() -> void:
+	network_nodes.clear()
+	network_connections.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = network_seed
+
+	var cx := 230.0
+	var cy := 200.0
+	var ring_spacing := 70.0
+	# CORE au centre (déjà conquis).
+	network_nodes.append({ "name": "CORE", "pos": Vector2(cx, cy), "type": "root", "value": 0.0, "cost": 0.0, "owned": true })
+
+	var prev_ring: Array = [0]        # indices des nœuds de l'anneau précédent
+	for ring in range(1, NETWORK_RINGS + 1):
+		var count := rng.randi_range(3, 5)
+		var radius := ring * ring_spacing
+		var base_angle := rng.randf() * TAU
+		var this_ring: Array = []
+		for k in count:
+			var angle := base_angle + k * (TAU / count) + rng.randf_range(-0.15, 0.15)
+			var r := radius + rng.randf_range(-4.0, 4.0)
+			var pos := Vector2(cx + cos(angle) * r, cy + sin(angle) * r)
+			var t := _random_node_type(rng)
+			var idx := network_nodes.size()
+			network_nodes.append({
+				"name": _type_short(t),
+				"pos": pos,
+				"type": t,
+				"value": _node_value(t, ring),
+				"cost": _node_cost(ring, rng),
+				"owned": false,
+			})
+			this_ring.append(idx)
+			# On relie au nœud le plus proche de l'anneau précédent (garantit l'accès).
+			network_connections.append([idx, _nearest_index(pos, prev_ring)])
+			# Parfois un 2e lien pour enrichir le graphe.
+			if rng.randf() < 0.3 and prev_ring.size() > 1:
+				var second := _nearest_index(pos, prev_ring, _nearest_index(pos, prev_ring))
+				if second >= 0:
+					network_connections.append([idx, second])
+		prev_ring = this_ring
+
+
+func _rebuild_network_view() -> void:
+	for c in network_content.get_children():
+		network_content.remove_child(c)
+		c.queue_free()
+	network_lines.clear()
+	network_buttons.clear()
+	network_labels.clear()
+	# Liens (Line2D) d'abord -> dessinés SOUS les nœuds.
+	for c in network_connections:
+		var line := Line2D.new()
+		line.width = 2.0
+		line.points = PackedVector2Array([network_nodes[c[0]].pos, network_nodes[c[1]].pos])
+		network_content.add_child(line)
+		network_lines.append({ "a": c[0], "b": c[1], "line": line })
+	# Chaque nœud = une pastille ronde (bouton circulaire + icône) + un label de coût.
+	for i in network_nodes.size():
+		var n: Dictionary = network_nodes[i]
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(46, 46)
+		btn.size = Vector2(46, 46)
+		btn.position = n.pos - Vector2(23, 23)
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.expand_icon = true
+		btn.icon = load(_type_icon(n.type)) as Texture2D
+		btn.pressed.connect(_on_network_node.bind(i))
+		network_content.add_child(btn)
+		network_buttons.append(btn)
+
+		var lbl := Label.new()
+		lbl.position = n.pos + Vector2(-34, 24)
+		lbl.custom_minimum_size = Vector2(68, 0)
+		lbl.size = Vector2(68, 14)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lbl.add_theme_font_size_override("font_size", 10)
+		network_content.add_child(lbl)
+		network_labels.append(lbl)
+	_network_fitted = false          # recadrage auto au prochain affichage
+
+
+func _make_node_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.set_border_width_all(2)
+	s.border_color = border
+	s.set_corner_radius_all(23)      # 46px -> cercle
+	s.set_content_margin_all(9.0)
+	return s
+
+
+func _type_icon(t: String) -> String:
+	match t:
+		"prod":  return "res://assets/icons/processor.svg"
+		"click": return "res://assets/icons/syringe.svg"
+		"cost":  return "res://assets/icons/gears.svg"
+		"data":  return "res://assets/icons/server-rack.svg"
+		"frag":  return "res://assets/icons/fragment.svg"
+	return "res://assets/icons/ai-logo.svg"
+
+
+func _random_node_type(rng: RandomNumberGenerator) -> String:
+	var r := rng.randf()
+	if r < 0.40: return "prod"
+	elif r < 0.60: return "click"
+	elif r < 0.75: return "cost"
+	elif r < 0.90: return "data"
+	return "frag"
+
+
+func _type_short(t: String) -> String:
+	match t:
+		"prod":  return "PROD"
+		"click": return "CLIC"
+		"cost":  return "COUT"
+		"data":  return "DATA"
+		"frag":  return "FRAG"
+	return "CORE"
+
+
+# Valeur du bonus selon type + profondeur (plus profond = plus fort).
+func _node_value(t: String, ring: int) -> float:
+	match t:
+		"prod":  return 0.10 + 0.05 * ring
+		"click": return 0.30 + 0.20 * ring
+		"cost":  return 0.04 + 0.02 * ring
+		"data":  return 150.0 + 120.0 * ring   # secondes de production (one-shot)
+		"frag":  return float(ring)
+	return 0.0
+
+
+func _node_cost(ring: int, rng: RandomNumberGenerator) -> float:
+	return ceil(NETWORK_COST_BASE * pow(NETWORK_COST_GROWTH, ring - 1) * rng.randf_range(0.85, 1.15))
+
+
+# Indice (dans `indices`) du nœud le plus proche de `pos`, en excluant `exclude`.
+func _nearest_index(pos: Vector2, indices: Array, exclude: int = -1) -> int:
+	var best := -1
+	var best_dist := INF
+	for i in indices:
+		if i == exclude:
+			continue
+		var d: float = network_nodes[i].pos.distance_to(pos)
+		if d < best_dist:
+			best_dist = d
+			best = i
+	return best
+
+
+# --- Zoom / déplacement (pan) de la carte -----------------------------------
+
+func _on_network_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_network_zoom(1.12, event.position)
+		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_network_zoom(1.0 / 1.12, event.position)
+	elif event is InputEventMouseMotion:
+		# Glisser (bouton gauche maintenu) sur le vide = déplacer la carte.
+		if event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+			network_content.position += event.relative
+
+
+func _network_zoom(factor: float, pivot: Vector2) -> void:
+	var old_s := network_content.scale.x
+	var new_s := clampf(old_s * factor, NET_MIN_ZOOM, NET_MAX_ZOOM)
+	if is_equal_approx(new_s, old_s):
+		return
+	var f := new_s / old_s
+	# On zoome vers le curseur : le point sous la souris reste fixe.
+	network_content.position = pivot - (pivot - network_content.position) * f
+	network_content.scale = Vector2(new_s, new_s)
+
+
+# Cadre toute la carte dans la vue (centrée), appelé une fois après (re)génération.
+func _fit_network_view() -> void:
+	if network_nodes.is_empty():
+		return
+	var minp: Vector2 = network_nodes[0].pos
+	var maxp: Vector2 = network_nodes[0].pos
+	for n in network_nodes:
+		minp = Vector2(minf(minp.x, n.pos.x), minf(minp.y, n.pos.y))
+		maxp = Vector2(maxf(maxp.x, n.pos.x), maxf(maxp.y, n.pos.y))
+	var pad := 50.0
+	var content_size := (maxp - minp) + Vector2(pad * 2, pad * 2)
+	var view_size := network_view.size
+	if view_size.x <= 1.0 or view_size.y <= 1.0:
+		view_size = Vector2(460, 400)
+	var s := clampf(minf(view_size.x / content_size.x, view_size.y / content_size.y), NET_MIN_ZOOM, NET_MAX_ZOOM)
+	network_content.scale = Vector2(s, s)
+	network_content.position = view_size * 0.5 - ((minp + maxp) * 0.5) * s
+
+
+# Un nœud est piratable s'il n'est pas conquis mais touche un nœud conquis.
+func _node_hackable(index: int) -> bool:
+	if network_nodes[index].owned:
+		return false
+	for c in network_connections:
+		if c[0] == index and network_nodes[c[1]].owned:
+			return true
+		if c[1] == index and network_nodes[c[0]].owned:
+			return true
+	return false
+
+
+func _on_network_node(index: int) -> void:
+	var n: Dictionary = network_nodes[index]
+	if n.owned or not _node_hackable(index):
+		return
+	if data < n.cost:
+		_set_status("Pas assez de Données pour ce nœud (%d o)." % int(n.cost))
+		return
+	data -= n.cost
+	n.owned = true
+	_apply_network_node(n)
+	_play_sfx("buy", -3.0, _buy_pitch_step(_network_owned_count()))
+	_flash(Color(0, 0.9, 0.82), 0.3)
+	_show_toast("NŒUD PIRATÉ", _network_node_desc(n), Color(0, 0.9, 0.82), 2.4)
+	_update_display()
+
+
+# Effet immédiat pour les nœuds "one-shot" (les autres sont lus en continu).
+func _apply_network_node(n: Dictionary) -> void:
+	match n.type:
+		"data":
+			_earn(maxf(production_per_second() * n.value, 5000.0))
+		"frag":
+			_gain_fragments(int(n.value))
+
+
+func _network_node_desc(n: Dictionary) -> String:
+	match n.type:
+		"prod":  return "Relais : +%d%% production (permanent)" % int(n.value * 100)
+		"click": return "Nœud de calcul : +%d%% par frappe (permanent)" % int(n.value * 100)
+		"cost":  return "Optimiseur : -%d%% coût des générateurs (permanent)" % int(n.value * 100)
+		"data":  return "Cache : ~%d s de production récupérées" % int(n.value)
+		"frag":  return "Coffre : +%d Fragment(s) d'IA" % int(n.value)
+		"root":  return "Cœur du réseau (point de départ)"
+	return ""
+
+
+# Bonus PERMANENTS agrégés depuis les nœuds conquis.
+func network_prod_mult() -> float:
+	var m: float = 1.0
+	for n in network_nodes:
+		if n.owned and n.type == "prod":
+			m += n.value
+	return m
+
+
+func network_click_mult() -> float:
+	var m: float = 1.0
+	for n in network_nodes:
+		if n.owned and n.type == "click":
+			m += n.value
+	return m
+
+
+func network_cost_factor() -> float:
+	var f: float = 1.0
+	for n in network_nodes:
+		if n.owned and n.type == "cost":
+			f *= (1.0 - n.value)
+	return maxf(f, 0.2)
+
+
+func _update_network() -> void:
+	# Couleur des liens selon l'état (conquis / frontière / inconnu).
+	for entry in network_lines:
+		var oa: bool = network_nodes[entry.a].owned
+		var ob: bool = network_nodes[entry.b].owned
+		var col: Color
+		if oa and ob:
+			col = Color(0, 0.8, 0.72, 0.9)
+		elif oa or ob:
+			col = Color(1, 0.16, 0.62, 0.75)        # frontière piratable
+		else:
+			col = Color(0.15, 0.22, 0.22, 0.6)
+		entry.line.default_color = col
+	# Boutons de nœuds.
+	for i in network_nodes.size():
+		var n: Dictionary = network_nodes[i]
+		var btn: Button = network_buttons[i]
+		var lbl: Label = network_labels[i]
+		var style: StyleBoxFlat
+		var icon_col: Color
+		var lbl_text := ""
+		if n.owned:
+			style = _node_style_owned
+			icon_col = Color(0, 0.9, 0.82)
+			btn.modulate = Color(1, 1, 1)
+			btn.tooltip_text = _network_node_desc(n)
+		elif _node_hackable(i):
+			style = _node_style_hack
+			icon_col = Color(1, 0.16, 0.62)
+			btn.modulate = Color(1, 1, 1) if data >= n.cost else Color(0.6, 0.6, 0.6)
+			lbl_text = "%s o" % _fmt_short(n.cost)
+			btn.tooltip_text = _network_node_desc(n) + "   —   coût %d o" % int(n.cost)
+		else:
+			style = _node_style_locked
+			icon_col = Color(0.3, 0.36, 0.36)
+			btn.modulate = Color(1, 1, 1)
+			btn.tooltip_text = "Nœud hors de portée"
+		btn.add_theme_stylebox_override("normal", style)
+		btn.add_theme_stylebox_override("hover", style)
+		btn.add_theme_stylebox_override("pressed", style)
+		btn.add_theme_color_override("icon_normal_color", icon_col)
+		btn.add_theme_color_override("icon_hover_color", icon_col)
+		btn.add_theme_color_override("icon_pressed_color", icon_col)
+		lbl.text = lbl_text
+		lbl.add_theme_color_override("font_color", Color(1, 0.4, 0.7))
+
+
+# Formate un grand nombre en court (500, 1.5K, 40K, 2.3M).
+func _fmt_short(v: float) -> String:
+	if v >= 1000000.0:
+		return "%.1fM" % (v / 1000000.0)
+	if v >= 1000.0:
+		return "%.1fK" % (v / 1000.0)
+	return "%d" % int(v)
+
+
+# --- Failles zero-day --------------------------------------------------------
+
+func _spawn_zeroday() -> void:
+	zeroday_window_remaining = ZERODAY_WINDOW
+	zeroday_button.visible = true
+	_set_status("Faille zero-day détectée ! Exploite-la vite.")
+
+
+func _on_zeroday_pressed() -> void:
+	if zeroday_window_remaining <= 0.0:
+		return
+	zeroday_window_remaining = 0.0
+	zeroday_button.visible = false
+	zeroday_buff_remaining = ZERODAY_BUFF_DURATION
+	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
+	_flash(Color(0, 0.9, 0.82), 0.4)   # flash cyan : boost
+	_spawn_floating_text("FAILLE !", _center_of(zeroday_button), Color(1, 0.16, 0.62))
+	_set_status("Faille exploitée : production x%d pendant %d s !" % [int(ZERODAY_MULT), int(ZERODAY_BUFF_DURATION)])
+	_update_display()
+
+
+# ---------------------------------------------------------------------------
+
+func _on_prestige_pressed() -> void:
+	if pending_fragments() < 1:
+		_set_status("Pas encore assez accumulé pour compiler.")
+		return
+	prestige_confirm.popup_centered()
+
+
+func _do_prestige() -> void:
+	var gained := pending_fragments()
+	if gained < 1:
+		return
+	_gain_fragments(gained)
+	prestige_count += 1
+	# P1 : le tout premier Fragment révèle la boutique d'Augmentations.
+	if not unlocked.augment:
+		unlocked.augment = true
+		_apply_gating()
+		_show_toast("NOUVELLE SECTION", "Augmentations débloquées — dépense tes Fragments d'IA (onglet Augmentations).", Color(1, 0.16, 0.62), 3.5)
+	# Reset de la RUN uniquement. Les items (payés en fragments) restent.
+	data = 0.0
+	run_earned = 0.0
+	for gen in generators:
+		gen.count = 0
+	# On repart d'une run "propre" côté risque aussi.
+	trace = 0.0
+	op_cooldown_remaining = 0.0
+	malus_remaining = 0.0
+	combo = 0
+	intrusion_active = false
+	boss_active = false
+	firewall_malus_remaining = 0.0
+	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
+	_regenerate_network()               # roguelike : une nouvelle carte à chaque prestige
+	_pick_new_command()
+	save_game()
+	_play_sfx("prestige")
+	_set_status("IA compilée : +%d fragment(s). Production x%.2f" % [gained, prestige_multiplier()])
+	_update_display()
+
+
+# ---------------------------------------------------------------------------
+# SAUVEGARDE / CHARGEMENT
+# ---------------------------------------------------------------------------
+
+func save_game() -> void:
+	var counts := {}
+	for gen in generators:
+		counts[gen.name] = gen.count
+	var item_levels := {}
+	for it in items:
+		item_levels[it.id] = it.level
+	var daemon_levels := {}
+	for d in daemons:
+		daemon_levels[d.id] = d.level
+	var network_owned := []
+	for i in network_nodes.size():
+		if network_nodes[i].owned:
+			network_owned.append(i)
+
+	var payload := {
+		"version": SAVE_VERSION,
+		"data": data,
+		"run_earned": run_earned,
+		"fragments": fragments,
+		"generators": counts,
+		"items": item_levels,
+		"daemons": daemon_levels,
+		"network_seed": network_seed,
+		"network_owned": network_owned,
+		"total_fragments_earned": total_fragments_earned,
+		"has_won": has_won,
+		"prestige_count": prestige_count,
+		"play_time": play_time,
+		"unlocked": unlocked,
+		"unlocks_owned": _owned_unlock_ids(),
+		"muted": muted,
+		"sfx_volume": sfx_volume,
+		"timestamp": Time.get_unix_time_from_system(),
+	}
+
+	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if file == null:
+		_set_status("Échec de la sauvegarde !")
+		return
+	file.store_string(JSON.stringify(payload, "\t"))
+	file.close()
+	_set_status("Sauvegardé à %s" % Time.get_time_string_from_system())
+
+
+func load_game() -> void:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return
+
+	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var text := file.get_as_text()
+	file.close()
+
+	var payload = JSON.parse_string(text)
+	if typeof(payload) != TYPE_DICTIONARY:
+		_set_status("Sauvegarde illisible, ignorée.")
+		return
+
+	data = float(payload.get("data", 0.0))
+	run_earned = float(payload.get("run_earned", 0.0))
+	fragments = int(payload.get("fragments", 0))
+	total_fragments_earned = int(payload.get("total_fragments_earned", fragments))
+	has_won = bool(payload.get("has_won", false))
+	prestige_count = int(payload.get("prestige_count", 0))
+	play_time = float(payload.get("play_time", 0.0))
+	muted = bool(payload.get("muted", false))
+	sfx_volume = float(payload.get("sfx_volume", 0.8))
+
+	if payload.has("unlocked"):
+		var saved_unlocked: Dictionary = payload.get("unlocked", {})
+		for k in unlocked:
+			unlocked[k] = bool(saved_unlocked.get(k, false))
+		var owned_ids: Array = payload.get("unlocks_owned", [])
+		for u in unlocks:
+			u.owned = u.id in owned_ids
+	else:
+		# Sauvegarde d'avant le système de déblocage : on débloque tout (pas de régression).
+		for k in unlocked:
+			unlocked[k] = true
+		for u in unlocks:
+			u.owned = true
+
+	var counts: Dictionary = payload.get("generators", {})
+	for gen in generators:
+		gen.count = int(counts.get(gen.name, 0))
+
+	var item_levels: Dictionary = payload.get("items", {})
+	for it in items:
+		it.level = int(item_levels.get(it.id, 0))
+
+	var daemon_levels: Dictionary = payload.get("daemons", {})
+	for d in daemons:
+		d.level = int(daemon_levels.get(d.id, 0))
+
+	# On régénère la carte de la run à partir du seed sauvegardé, puis on restaure
+	# les nœuds déjà conquis (indices valides car la génération est déterministe).
+	network_seed = int(payload.get("network_seed", network_seed))
+	_generate_network()
+	var network_owned: Array = payload.get("network_owned", [])
+	for idx in network_owned:
+		var ii := int(idx)
+		if ii >= 0 and ii < network_nodes.size():
+			network_nodes[ii].owned = true
+	_rebuild_network_view()
+
+
+func _on_save_pressed() -> void:
+	save_game()
+
+
+func _on_reset_pressed() -> void:
+	# Reset TOTAL (Données, générateurs, fragments ET items) — outil de test.
+	data = 0.0
+	run_earned = 0.0
+	fragments = 0
+	for gen in generators:
+		gen.count = 0
+	for it in items:
+		it.level = 0
+	trace = 0.0
+	op_cooldown_remaining = 0.0
+	malus_remaining = 0.0
+	zeroday_buff_remaining = 0.0
+	zeroday_window_remaining = 0.0
+	zeroday_button.visible = false
+	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
+	combo = 0
+	intrusion_active = false
+	final_command_active = false
+	total_fragments_earned = 0
+	has_won = false
+	prestige_count = 0
+	play_time = 0.0
+	for k in unlocked:
+		unlocked[k] = false
+	for u in unlocks:
+		u.owned = false
+	event_active = false
+	event_id = ""
+	event_spawn_timer = randf_range(EVENT_SPAWN_MIN, EVENT_SPAWN_MAX)
+	_apply_gating()
+	boss_active = false
+	boss_level = 0
+	firewall_malus_remaining = 0.0
+	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
+	for d in daemons:
+		d.level = 0
+		d.cd_remaining = 0.0
+		d.active_remaining = 0.0
+	_regenerate_network()
+	_pick_new_command()
+	var dir := DirAccess.open("user://")
+	if dir != null and dir.file_exists("save.json"):
+		dir.remove("save.json")
+	_set_status("Partie réinitialisée.")
+	_update_display()
+
+
+func _set_status(msg: String) -> void:
+	status_label.text = msg
+
+
+# ---------------------------------------------------------------------------
+# EFFETS VISUELS ("juice") — tout est asset-free, à base de Tween/particules.
+# ---------------------------------------------------------------------------
+
+# Fait apparaître un texte qui monte et s'efface (ex : "+42 o") à une position.
+func _spawn_floating_text(text: String, at_pos: Vector2, color: Color) -> void:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_font_size_override("font_size", 18)
+	lbl.z_index = 10
+	fx_layer.add_child(lbl)
+	# Position (avec un léger décalage aléatoire pour éviter la superposition).
+	lbl.position = at_pos + Vector2(randf_range(-14.0, 14.0), -10.0)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(lbl, "position:y", lbl.position.y - 64.0, 0.8) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(lbl, "modulate:a", 0.0, 0.8)
+	tween.set_parallel(false)
+	tween.tween_callback(lbl.queue_free)   # se nettoie tout seul à la fin
+
+
+# Petit "pop" d'agrandissement, typiquement sur le compteur de Données.
+func _pop(node: Control) -> void:
+	if _pop_tween != null and _pop_tween.is_valid():
+		_pop_tween.kill()          # on annule le pop précédent pour éviter les conflits
+	node.pivot_offset = node.size / 2.0   # pivot au centre pour agrandir "sur place"
+	node.scale = Vector2.ONE
+	_pop_tween = create_tween()
+	_pop_tween.tween_property(node, "scale", Vector2(1.18, 1.18), 0.08) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_pop_tween.tween_property(node, "scale", Vector2.ONE, 0.14) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+
+# Flash coloré plein écran qui s'estompe (feedback d'événement fort).
+func _flash(color: Color, strength: float = 0.35) -> void:
+	flash_rect.color = Color(color.r, color.g, color.b, strength)
+	create_tween().tween_property(flash_rect, "color:a", 0.0, 0.5)
+
+
+# Secousse par rotation (transform indépendant du layout, donc sans conflit).
+func _shake(node: Control) -> void:
+	node.pivot_offset = node.size / 2.0
+	var tween := create_tween()
+	tween.tween_property(node, "rotation", deg_to_rad(2.5), 0.04)
+	tween.tween_property(node, "rotation", deg_to_rad(-2.5), 0.08)
+	tween.tween_property(node, "rotation", 0.0, 0.05)
+
+
+# Jet de particules ponctuel à une position donnée.
+func _burst_particles(at_pos: Vector2) -> void:
+	click_particles.global_position = at_pos
+	click_particles.restart()   # relance l'émission (one_shot)
+
+
+# Centre global d'un contrôle (pratique pour viser une position d'effet).
+func _center_of(control: Control) -> Vector2:
+	return control.global_position + control.size / 2.0
+
+
+# ---------------------------------------------------------------------------
+# AFFICHAGE
+# ---------------------------------------------------------------------------
+
+func _update_display() -> void:
+	data_label.text = "%d o" % data
+	prod_label.text = "%.1f o/s" % production_per_second()
+	fragment_label.text = "%d" % fragments
+	_update_typing_ui()
+
+	# Ligne de prestige : bonus actuel, accumulé, et seuil du prochain fragment.
+	var pending := pending_fragments()
+	var next_threshold := fragments_threshold(pending + 1)
+	var remaining := maxf(0.0, next_threshold - run_earned)
+	prestige_info.text = "+%d%% prod   |   accumulé %d o   |   prochain fragment dans %d o" % [int(fragments * FRAGMENT_BONUS * 100), int(run_earned), int(remaining)]
+
+	# Objectif de fin.
+	if has_won:
+		objective_label.text = "OBJECTIF ATTEINT — IA ÉVEILLÉE (mode libre)"
+		objective_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
+	elif total_fragments_earned >= AWAKEN_TARGET:
+		objective_label.text = "IA PRÊTE — tape la COMMANDE D'ÉVEIL dans le terminal !"
+		objective_label.add_theme_color_override("font_color", Color(1, 0.81, 0.25))
+	else:
+		objective_label.text = "OBJECTIF — Éveil de l'IA : %d / %d Fragments cumulés" % [total_fragments_earned, AWAKEN_TARGET]
+		objective_label.add_theme_color_override("font_color", Color(0.7, 0.6, 0.35))
+
+	# Bouton explicite, même quand on ne peut pas encore compiler.
+	if pending >= 1:
+		prestige_button.text = "COMPILER L'IA (+%d fragment%s)" % [pending, "s" if pending > 1 else ""]
+	else:
+		prestige_button.text = "COMPILER L'IA — accumule encore %d o" % int(remaining)
+	prestige_button.disabled = pending < 1
+
+	# --- Section opérations à risque ---
+	# Barre + libellé de cooldown.
+	cooldown_bar.value = OP_COOLDOWN - op_cooldown_remaining
+	if op_cooldown_remaining > 0.0:
+		op_button.disabled = true
+		op_button.text = "Rechargement... %d s" % int(ceil(op_cooldown_remaining))
+	else:
+		op_button.disabled = false
+		# On montre le gain potentiel (même formule que la récompense réelle).
+		var potential := int(maxf(production_per_second() * OP_REWARD_SECONDS, click_value() * OP_MIN_REWARD_CLICKS))
+		op_button.text = "PIRATER LA CIBLE : +%d o  (%d%% de réussite)" % [potential, int(OP_SUCCESS_CHANCE * 100)]
+
+	# Jauge de traçage.
+	trace_bar.value = trace
+	trace_label.text = "Traçage : %d %%" % int(trace)
+
+	# Bouton de faille (compte à rebours pendant qu'il est visible).
+	if zeroday_window_remaining > 0.0:
+		zeroday_button.text = "EXPLOITER LA FAILLE (%d s)" % int(ceil(zeroday_window_remaining))
+
+	# Ligne d'état des effets temporaires actifs.
+	var status_txt := ""
+	if zeroday_buff_remaining > 0.0:
+		status_txt += "FAILLE ACTIVE : prod x%d (%d s)" % [int(ZERODAY_MULT), int(ceil(zeroday_buff_remaining))]
+	if malus_remaining > 0.0:
+		if status_txt != "":
+			status_txt += "     "
+		status_txt += "TRACÉ : prod /%d (%d s)" % [int(1.0 / MALUS_MULT), int(ceil(malus_remaining))]
+	if firewall_malus_remaining > 0.0:
+		if status_txt != "":
+			status_txt += "     "
+		status_txt += "FIREWALL : prod /%d (%d s)" % [int(1.0 / FIREWALL_MALUS_MULT), int(ceil(firewall_malus_remaining))]
+	if event_active:
+		if status_txt != "":
+			status_txt += "     "
+		status_txt += "%s (%d s)" % ["INSTABILITÉ" if event_id == "instabilite" else "SURCHARGE", int(ceil(event_timer))]
+	event_status.text = status_txt if status_txt != "" else " "
+
+	_update_network()
+	# Recadrage auto dès que la vue a une taille réelle (après la 1re mise en page).
+	if not _network_fitted and network_view.size.x > 1.0:
+		_fit_network_view()
+		_network_fitted = true
+
+	# Barre de vie du firewall pendant le combat.
+	boss_panel.visible = boss_active
+	if boss_active:
+		boss_hp_bar.max_value = boss_max_hp
+		boss_hp_bar.value = boss_hp
+		boss_info.text = "PV %d/%d   —   %d s" % [int(ceil(boss_hp)), int(boss_max_hp), int(ceil(boss_timer))]
+
+	for i in generators.size():
+		var gen: Dictionary = generators[i]
+		var cost := cost_of(gen)
+		gen_rows[i].refresh(gen.name, gen.count, gen.production, cost, data >= cost)
+
+	for i in unlocks.size():
+		_refresh_unlock_row(i)
+	for i in items.size():
+		_refresh_item_row(i)
+
+	for i in daemons.size():
+		var d: Dictionary = daemons[i]
+		var btn := daemon_buttons[i]
+		if d.get("pay_per_use", false):
+			# GHOST : toujours dispo, grisé si on n'a pas les Fragments.
+			var use_cost := int(d.use_cost)
+			btn.visible = true
+			btn.text = "%s (%d Frag)" % [d.name, use_cost]
+			btn.disabled = fragments < use_cost
+		else:
+			btn.visible = d.level >= 1          # la barre ne montre que les daemons débloqués
+			if d.level >= 1:
+				if d.active_remaining > 0.0:
+					btn.text = "%s [%ds]" % [d.name, int(ceil(d.active_remaining))]
+					btn.disabled = true
+				elif d.cd_remaining > 0.0:
+					btn.text = "%s %ds" % [d.name, int(ceil(d.cd_remaining))]
+					btn.disabled = true
+				else:
+					btn.text = d.name
+					btn.disabled = false
+		_refresh_daemon_row(i)
+
+
+func _refresh_item_row(i: int) -> void:
+	var it: Dictionary = items[i]
+	var title := "[%s] %s  (Nv %d/%d)" % [it.category, it.name, it.level, it.max_level]
+	var desc := _item_desc(it)
+	var maxed: bool = it.level >= it.max_level
+	var cost := item_cost(it)
+	var button_text := "MAX" if maxed else "Améliorer — %d Frag" % cost
+	var buyable := (not maxed) and fragments >= cost
+	item_rows[i].refresh(title, desc, button_text, buyable)
+
+
+func _item_desc(it: Dictionary) -> String:
+	match it.effect:
+		"prod_mult":  return "Production globale +%d%% par niveau" % int(it.value * 100)
+		"click_mult": return "Gain au clic +%d%% par niveau" % int(it.value * 100)
+		"cost_reduc": return "Coût des générateurs -%d%% par niveau" % int(it.value * 100)
+		"autoclick":  return "+%.0f clic auto / seconde par niveau" % it.value
+		"synergy":    return "+%d%% production par type de générateur possédé, par niveau" % int(it.value * 100)
+	return ""
