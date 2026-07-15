@@ -15,7 +15,7 @@ const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 7                 # +items +daemons +network +objectif +déblocages
 
 # Infos de publication (affichées dans l'aide "À propos" et le footer).
-const GAME_VERSION := "0.1.0"
+const GAME_VERSION := "0.2.0"
 const GAME_AUTHOR := "Jonathan GAULUPEAU"
 const GAME_YEAR := "2026"
 const GAME_LICENSE := "Creative Commons BY-NC 4.0"
@@ -401,6 +401,7 @@ const NET_MAX_ZOOM := 2.5
 @onready var save_button: RichTextLabel = %SaveButton
 @onready var reset_button: RichTextLabel = %ResetButton
 @onready var about_label: Label = %AboutLabel
+@onready var title_ver: Label = %TitleVer
 @onready var status_label: Label = %StatusLabel
 @onready var clock_label: Label = %ClockLabel
 
@@ -424,6 +425,7 @@ func _ready() -> void:
 	tabs.set_tab_title(2, "Programmes")
 	tabs.set_tab_title(3, "Réseau")
 	about_label.text = "v%s · © %s %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR]
+	title_ver.text = "v%s" % GAME_VERSION
 	about_label.tooltip_text = "Cyber Increment v%s\n© %s %s\nLicence : %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE]
 	prestige_button.pressed.connect(_on_prestige_pressed)
 	confirm_ok.pressed.connect(_on_confirm_ok)
@@ -1462,7 +1464,7 @@ func _add_terminal_line(gain: float) -> void:
 
 func _seed_terminal() -> void:
 	term_lines = [
-		"[color=#3aaa3a]NEXUS OS 0.1.0 — 640K OK[/color]",
+		"[color=#3aaa3a]NEXUS OS 0.2.0 — 640K OK[/color]",
 		"[color=#5c9c5c]system: nexus online[/color]",
 		"[color=#5c9c5c]link: tunnel chiffré établi[/color]",
 		"[color=#5c9c5c]awaiting input...[/color]",
