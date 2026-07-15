@@ -308,6 +308,8 @@ var daemon_rows: Array[ItemRow] = []
 const NETWORK_RINGS := 4              # nombre d'anneaux autour du CORE
 const NETWORK_COST_BASE := 400.0      # coût (Données) d'un nœud de l'anneau 1
 const NETWORK_COST_GROWTH := 5.0      # ×coût par anneau plus profond
+const NETWORK_CELL := 46.0            # pas de la grille (schéma circuit imprimé, style DOS)
+const NETWORK_NODE_SIZE := 32.0       # taille des pastilles carrées
 var network_nodes: Array[Dictionary] = []
 var network_connections: Array = []   # paires [i, j] d'indices reliés
 var network_seed: int = 0
@@ -427,9 +429,11 @@ func _ready() -> void:
 	_build_item_rows()
 	_build_daemon_buttons()
 	_build_daemon_rows()
-	_node_style_owned = _make_node_style(Color(0.0, 0.15, 0.14, 0.95), Color(0, 0.9, 0.82))
-	_node_style_hack = _make_node_style(Color(0.16, 0.02, 0.1, 0.95), Color(1, 0.16, 0.62))
-	_node_style_locked = _make_node_style(Color(0.06, 0.08, 0.09, 0.9), Color(0.25, 0.3, 0.3))
+	# Pastilles CARRÉES façon DOS (cohérent avec boutons/panneaux du reste du HUD) :
+	# conquis = panneau gris plat, piratable = bouton cyan à ombre dure, verrouillé = grisé.
+	_node_style_owned = _make_flat(Color(0.788, 0.788, 0.788), Color(0, 0, 0), 1, Vector2.ZERO)
+	_node_style_hack = _make_flat(Color(0, 0.667, 0.667), Color(0, 0, 0), 1, Vector2(3, 3))
+	_node_style_locked = _make_flat(Color(0.6, 0.6, 0.6), Color(0.3, 0.3, 0.3), 1, Vector2.ZERO)
 	_regenerate_network()
 	load_game()
 	_setup_autosave()
@@ -1701,30 +1705,51 @@ func _regenerate_network() -> void:
 	_rebuild_network_view()
 
 
+# Trouve la cellule de grille libre la plus proche de 'raw' (en unités de cellule).
+# Recherche en spirale : garantit l'absence de chevauchement entre nœuds tout en
+# restant déterministe (aucun hasard ici, juste de la géométrie).
+func _network_snap_free_cell(raw: Vector2, occupied: Dictionary) -> Vector2i:
+	var base := Vector2i(roundi(raw.x), roundi(raw.y))
+	if not occupied.has(base):
+		return base
+	for radius in range(1, 6):
+		for dx in range(-radius, radius + 1):
+			for dy in range(-radius, radius + 1):
+				if maxi(absi(dx), absi(dy)) != radius:
+					continue
+				var c := base + Vector2i(dx, dy)
+				if not occupied.has(c):
+					return c
+	return base   # Filet de sécurité (improbable avec un graphe de cette densité).
+
+
 # Génère network_nodes + network_connections de façon DÉTERMINISTE depuis le seed
 # (même seed => même carte, indispensable pour la sauvegarde de la run).
+# Les positions sont accrochées à une grille (schéma "circuit imprimé", cohérent
+# avec le reste de l'UI DOS) : pas de placement libre, uniquement des cellules.
 func _generate_network() -> void:
 	network_nodes.clear()
 	network_connections.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = network_seed
 
-	var cx := 230.0
-	var cy := 200.0
-	var ring_spacing := 70.0
-	# CORE au centre (déjà conquis).
-	network_nodes.append({ "name": "CORE", "pos": Vector2(cx, cy), "type": "root", "value": 0.0, "cost": 0.0, "owned": true })
+	var occupied := { Vector2i.ZERO: true }
+	# CORE à l'origine de la grille (déjà conquis).
+	network_nodes.append({ "name": "CORE", "pos": Vector2.ZERO, "type": "root", "value": 0.0, "cost": 0.0, "owned": true })
 
 	var prev_ring: Array = [0]        # indices des nœuds de l'anneau précédent
 	for ring in range(1, NETWORK_RINGS + 1):
 		var count := rng.randi_range(3, 5)
-		var radius := ring * ring_spacing
+		var radius := ring * 1.55     # rayon en CELLULES (pas en pixels)
 		var base_angle := rng.randf() * TAU
 		var this_ring: Array = []
 		for k in count:
 			var angle := base_angle + k * (TAU / count) + rng.randf_range(-0.15, 0.15)
-			var r := radius + rng.randf_range(-4.0, 4.0)
-			var pos := Vector2(cx + cos(angle) * r, cy + sin(angle) * r)
+			var r := radius + rng.randf_range(-0.12, 0.12)
+			var raw_cell := Vector2(cos(angle) * r, sin(angle) * r)
+			var gc := _network_snap_free_cell(raw_cell, occupied)
+			occupied[gc] = true
+			var pos := Vector2(gc.x, gc.y) * NETWORK_CELL
 			var t := _random_node_type(rng)
 			var idx := network_nodes.size()
 			network_nodes.append({
@@ -1753,20 +1778,31 @@ func _rebuild_network_view() -> void:
 	network_lines.clear()
 	network_buttons.clear()
 	network_labels.clear()
-	# Liens (Line2D) d'abord -> dessinés SOUS les nœuds.
+	# Liens (Line2D) d'abord -> dessinés SOUS les nœuds. Tracé à angle droit
+	# (façon piste de circuit imprimé) : horizontal puis vertical, jamais en diagonale.
 	for c in network_connections:
+		var pa: Vector2 = network_nodes[c[0]].pos
+		var pb: Vector2 = network_nodes[c[1]].pos
 		var line := Line2D.new()
 		line.width = 2.0
-		line.points = PackedVector2Array([network_nodes[c[0]].pos, network_nodes[c[1]].pos])
+		line.antialiased = false
+		line.joint_mode = Line2D.LINE_JOINT_SHARP
+		line.begin_cap_mode = Line2D.LINE_CAP_BOX
+		line.end_cap_mode = Line2D.LINE_CAP_BOX
+		if pa.x == pb.x or pa.y == pb.y:
+			line.points = PackedVector2Array([pa, pb])           # déjà alignés
+		else:
+			line.points = PackedVector2Array([pa, Vector2(pb.x, pa.y), pb])
 		network_content.add_child(line)
 		network_lines.append({ "a": c[0], "b": c[1], "line": line })
-	# Chaque nœud = une pastille ronde (bouton circulaire + icône) + un label de coût.
+	# Chaque nœud = une pastille CARRÉE (bouton + icône) + un label de coût.
+	var half := NETWORK_NODE_SIZE / 2.0
 	for i in network_nodes.size():
 		var n: Dictionary = network_nodes[i]
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(46, 46)
-		btn.size = Vector2(46, 46)
-		btn.position = n.pos - Vector2(23, 23)
+		btn.custom_minimum_size = Vector2(NETWORK_NODE_SIZE, NETWORK_NODE_SIZE)
+		btn.size = Vector2(NETWORK_NODE_SIZE, NETWORK_NODE_SIZE)
+		btn.position = n.pos - Vector2(half, half)
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.expand_icon = true
 		btn.icon = load(_type_icon(n.type)) as Texture2D
@@ -1775,25 +1811,15 @@ func _rebuild_network_view() -> void:
 		network_buttons.append(btn)
 
 		var lbl := Label.new()
-		lbl.position = n.pos + Vector2(-34, 24)
-		lbl.custom_minimum_size = Vector2(68, 0)
-		lbl.size = Vector2(68, 14)
+		lbl.position = n.pos + Vector2(-32, half + 3)
+		lbl.custom_minimum_size = Vector2(64, 0)
+		lbl.size = Vector2(64, 14)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lbl.add_theme_font_size_override("font_size", 10)
 		network_content.add_child(lbl)
 		network_labels.append(lbl)
 	_network_fitted = false          # recadrage auto au prochain affichage
-
-
-func _make_node_style(bg: Color, border: Color) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = bg
-	s.set_border_width_all(2)
-	s.border_color = border
-	s.set_corner_radius_all(23)      # 46px -> cercle
-	s.set_content_margin_all(9.0)
-	return s
 
 
 func _type_icon(t: String) -> String:
@@ -1972,17 +1998,17 @@ func network_cost_factor() -> float:
 
 
 func _update_network() -> void:
-	# Couleur des liens selon l'état (conquis / frontière / inconnu).
+	# Couleur des liens (pistes de circuit) selon l'état (conquis / frontière / inconnu).
 	for entry in network_lines:
 		var oa: bool = network_nodes[entry.a].owned
 		var ob: bool = network_nodes[entry.b].owned
 		var col: Color
 		if oa and ob:
-			col = Color(0, 0.8, 0.72, 0.9)
+			col = Color(0.15, 0.15, 0.15, 0.9)       # piste alimentée (conquise des deux côtés)
 		elif oa or ob:
-			col = Color(1, 0.16, 0.62, 0.75)        # frontière piratable
+			col = Color(0, 0.667, 0.667, 1)          # frontière piratable -> cyan (comme un bouton actif)
 		else:
-			col = Color(0.15, 0.22, 0.22, 0.6)
+			col = Color(0.55, 0.55, 0.55, 0.5)       # piste non alimentée, à peine visible
 		entry.line.default_color = col
 	# Boutons de nœuds.
 	for i in network_nodes.size():
@@ -1994,18 +2020,18 @@ func _update_network() -> void:
 		var lbl_text := ""
 		if n.owned:
 			style = _node_style_owned
-			icon_col = Color(0, 0.9, 0.82)
+			icon_col = Color(0, 0, 0.5)              # bleu DOS, comme les icônes de générateurs
 			btn.modulate = Color(1, 1, 1)
 			btn.tooltip_text = _network_node_desc(n)
 		elif _node_hackable(i):
 			style = _node_style_hack
-			icon_col = Color(1, 0.16, 0.62)
+			icon_col = Color(0.667, 0, 0)             # rouge, comme le texte des boutons cyan
 			btn.modulate = Color(1, 1, 1) if data >= n.cost else Color(0.6, 0.6, 0.6)
 			lbl_text = "%s o" % _fmt_short(n.cost)
 			btn.tooltip_text = _network_node_desc(n) + "   —   coût %d o" % int(n.cost)
 		else:
 			style = _node_style_locked
-			icon_col = Color(0.3, 0.36, 0.36)
+			icon_col = Color(0.35, 0.35, 0.35)
 			btn.modulate = Color(1, 1, 1)
 			btn.tooltip_text = "Nœud hors de portée"
 		btn.add_theme_stylebox_override("normal", style)
@@ -2015,7 +2041,7 @@ func _update_network() -> void:
 		btn.add_theme_color_override("icon_hover_color", icon_col)
 		btn.add_theme_color_override("icon_pressed_color", icon_col)
 		lbl.text = lbl_text
-		lbl.add_theme_color_override("font_color", Color(1, 0.4, 0.7))
+		lbl.add_theme_color_override("font_color", Color(0, 0, 0))
 
 
 # Formate un grand nombre en court (500, 1.5K, 40K, 2.3M).
