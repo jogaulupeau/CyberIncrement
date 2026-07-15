@@ -573,7 +573,7 @@ func _build_help_topics() -> void:
 		var btn := Button.new()
 		btn.text = help_topics[i].label
 		btn.focus_mode = Control.FOCUS_NONE
-		btn.add_theme_font_size_override("font_size", 12)
+		btn.add_theme_font_size_override("font_size", 14)
 		btn.pressed.connect(_show_help_topic.bind(i))
 		help_topics_bar.add_child(btn)
 		help_buttons.append(btn)
@@ -1618,7 +1618,7 @@ func _show_toast(title: String, message: String, color: Color, duration: float =
 	var tl := Label.new()
 	tl.text = title
 	tl.add_theme_color_override("font_color", Color(1, 1, 1))
-	tl.add_theme_font_size_override("font_size", 13)
+	tl.add_theme_font_size_override("font_size", 16)
 	bar.add_child(tl)
 	vb.add_child(bar)
 
@@ -1631,7 +1631,7 @@ func _show_toast(title: String, message: String, color: Color, duration: float =
 	var ml := Label.new()
 	ml.text = message
 	ml.add_theme_color_override("font_color", Color(0, 0, 0))
-	ml.add_theme_font_size_override("font_size", 12)
+	ml.add_theme_font_size_override("font_size", 14)
 	ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mm.add_child(ml)
 	vb.add_child(mm)
@@ -1863,7 +1863,7 @@ func _rebuild_network_view() -> void:
 		lbl.size = Vector2(64, 14)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lbl.add_theme_font_size_override("font_size", 10)
+		lbl.add_theme_font_size_override("font_size", 12)
 		network_content.add_child(lbl)
 		network_labels.append(lbl)
 	_network_fitted = false          # recadrage auto au prochain affichage
@@ -2346,7 +2346,7 @@ func _spawn_floating_text(text: String, at_pos: Vector2, color: Color) -> void:
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.add_theme_color_override("font_color", color)
-	lbl.add_theme_font_size_override("font_size", 18)
+	lbl.add_theme_font_size_override("font_size", 22)
 	lbl.z_index = 10
 	fx_layer.add_child(lbl)
 	# Position (avec un léger décalage aléatoire pour éviter la superposition).

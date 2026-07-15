@@ -202,14 +202,14 @@ stretch_mode = 5
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 19
 text = "CYBER INCREMENT"
 horizontal_alignment = 1
 
 [node name="TitleVer" type="Label" parent="HUD/Root/TitleBar/H"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "v0.1.0"
 
 [node name="MenuBar" type="PanelContainer" parent="HUD/Root"]
@@ -226,7 +226,7 @@ custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 size_flags_vertical = 4
 mouse_default_cursor_shape = 2
-theme_override_font_sizes/normal_font_size = 14
+theme_override_font_sizes/normal_font_size = 17
 bbcode_enabled = true
 text = "[color=#aa0000]A[/color]ide"
 fit_content = true
@@ -239,7 +239,7 @@ custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 size_flags_vertical = 4
 mouse_default_cursor_shape = 2
-theme_override_font_sizes/normal_font_size = 14
+theme_override_font_sizes/normal_font_size = 17
 bbcode_enabled = true
 text = "[color=#aa0000]S[/color]auver"
 fit_content = true
@@ -252,7 +252,7 @@ custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 size_flags_vertical = 4
 mouse_default_cursor_shape = 2
-theme_override_font_sizes/normal_font_size = 14
+theme_override_font_sizes/normal_font_size = 17
 bbcode_enabled = true
 text = "[color=#aa0000]R[/color]éinitialiser"
 fit_content = true
@@ -272,7 +272,7 @@ text = "SON: ON"
 [node name="VolLabel" type="Label" parent="HUD/Root/TopBar"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.2, 0.2, 0.2, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "VOL"
 
 [node name="VolumeSlider" type="HSlider" parent="HUD/Root/TopBar"]
@@ -303,14 +303,14 @@ theme_override_constants/separation = 7
 [node name="Cap" type="Label" parent="HUD/Root/TopBar/Stats/DataChip/H"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.3, 0.3, 0.3, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "DONNÉES"
 
 [node name="DataLabel" type="Label" parent="HUD/Root/TopBar/Stats/DataChip/H"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 19
 text = "0 o"
 
 [node name="FragChip" type="PanelContainer" parent="HUD/Root/TopBar/Stats"]
@@ -332,14 +332,14 @@ stretch_mode = 5
 [node name="Cap" type="Label" parent="HUD/Root/TopBar/Stats/FragChip/H"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.4, 0.2, 0.4, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "FRAGMENTS"
 
 [node name="FragmentLabel" type="Label" parent="HUD/Root/TopBar/Stats/FragChip/H"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.541, 0, 0.541, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 19
 text = "0"
 
 [node name="ProdChip" type="PanelContainer" parent="HUD/Root/TopBar/Stats"]
@@ -352,14 +352,14 @@ theme_override_constants/separation = 7
 [node name="Cap" type="Label" parent="HUD/Root/TopBar/Stats/ProdChip/H"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.3, 0.3, 0.3, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "PROD"
 
 [node name="ProdLabel" type="Label" parent="HUD/Root/TopBar/Stats/ProdChip/H"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.4, 0, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 19
 text = "0.0 o/s"
 
 [node name="Body" type="HBoxContainer" parent="HUD/Root"]
@@ -385,7 +385,7 @@ theme_override_constants/separation = 4
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.667, 0, 0, 1)
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 17
 text = "/// FIREWALL /// — brise-le en tapant les commandes !"
 horizontal_alignment = 1
 
@@ -399,7 +399,7 @@ show_percentage = false
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.5, 0, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "PV 0/0   —   0 s"
 horizontal_alignment = 1
 
@@ -422,13 +422,13 @@ mouse_filter = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0, 0.85, 0.85, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "TERMINAL"
 
 [node name="TCapStatus" type="Label" parent="HUD/Root/Body/Left/Terminal/TVBox/TCaption"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.2, 1, 0.4, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "● SESSION ACTIVE"
 
 [node name="TSep" type="HSeparator" parent="HUD/Root/Body/Left/Terminal/TVBox"]
@@ -437,7 +437,7 @@ layout_mode = 2
 [node name="TermHeader" type="Label" parent="HUD/Root/Body/Left/Terminal/TVBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.333, 1, 0.333, 1)
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 16
 text = "A:\\NEXUS> breach --target corp"
 
 [node name="TerminalLog" type="RichTextLabel" parent="HUD/Root/Body/Left/Terminal/TVBox"]
@@ -446,7 +446,7 @@ custom_minimum_size = Vector2(0, 150)
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
-theme_override_font_sizes/normal_font_size = 12
+theme_override_font_sizes/normal_font_size = 14
 bbcode_enabled = true
 scroll_following = true
 
@@ -457,7 +457,7 @@ mouse_filter = 2
 [node name="CommandPrefix" type="Label" parent="HUD/Root/Body/Left/Terminal/TVBox/TCommand"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.333, 1, 0.333, 1)
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 16
 text = "A:\\>"
 
 [node name="CommandLabel" type="RichTextLabel" parent="HUD/Root/Body/Left/Terminal/TVBox/TCommand"]
@@ -465,7 +465,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(500, 26)
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/normal_font_size = 16
+theme_override_font_sizes/normal_font_size = 19
 bbcode_enabled = true
 fit_content = true
 
@@ -473,7 +473,7 @@ fit_content = true
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.667, 0.667, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "[ cliquer pour injecter une commande ]"
 horizontal_alignment = 1
 
@@ -488,7 +488,7 @@ theme_override_constants/separation = 6
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0.5, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "— OPÉRATIONS À RISQUE —"
 horizontal_alignment = 1
 
@@ -496,7 +496,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.25, 0.25, 0.25, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 15
 text = "Coup de poker : une réussite rapporte un gros gain instantané (~30 s de production). Un échec fait monter le TRAÇAGE ; à 100 %, ta production est divisée par 4 pendant un moment."
 horizontal_alignment = 1
 autowrap_mode = 2
@@ -516,7 +516,7 @@ show_percentage = false
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.667, 0, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "Traçage : 0 %"
 horizontal_alignment = 1
 
@@ -552,7 +552,7 @@ grow_vertical = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
 theme_override_constants/outline_size = 4
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 16
 text = "0 %"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -568,7 +568,7 @@ text = "EXPLOITER LA FAILLE (0 s)"
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.35, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = " "
 horizontal_alignment = 1
 
@@ -583,7 +583,7 @@ theme_override_constants/separation = 6
 [node name="DTitle" type="Label" parent="HUD/Root/Body/Left/DaemonsPanel/DVBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0.5, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "— PROGRAMMES (daemons) —"
 horizontal_alignment = 1
 
@@ -665,7 +665,7 @@ theme_override_constants/separation = 6
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.25, 0.25, 0.25, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "Accumulé cette run : 0 o"
 horizontal_alignment = 1
 
@@ -678,8 +678,8 @@ text = "COMPILER L'IA (+0 fragment)"
 [node name="ObjectiveLabel" type="Label" parent="HUD/Root/Body/Right/PrestigePanel/PVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.5, 0.3, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.25098, 0.25098, 0.25098, 1)
+theme_override_font_sizes/font_size = 14
 text = "OBJECTIF — Éveil de l'IA : 0 / 100 Fragments"
 horizontal_alignment = 1
 
@@ -694,7 +694,7 @@ theme_override_constants/separation = 12
 [node name="HintLabel" type="Label" parent="HUD/Root/StatusBar/H"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "F1=Aide  F5=Sauver"
 
 [node name="StatusLabel" type="Label" parent="HUD/Root/StatusBar/H"]
@@ -702,7 +702,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = " "
 horizontal_alignment = 1
 
@@ -713,7 +713,7 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "00:00:00"
 
 [node name="Sep2" type="VSeparator" parent="HUD/Root/StatusBar/H"]
@@ -723,7 +723,7 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "© 2026 Jonathan GAULUPEAU"
 
 [node name="FxLayer" type="Control" parent="."]
@@ -823,7 +823,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.2, 0.2, 1)
 theme_override_colors/font_outline_color = Color(0.3, 0, 0, 0.85)
 theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 52
+theme_override_font_sizes/font_size = 62
 text = "/// TRACÉ ///"
 horizontal_alignment = 1
 
@@ -831,7 +831,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.55, 0.5, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 26
 text = "Données effacées : -0 o"
 horizontal_alignment = 1
 
@@ -839,14 +839,14 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.8, 0.5, 0.5, 1)
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 18
 text = "Production réduite"
 horizontal_alignment = 1
 
 [node name="BustedHint" type="Label" parent="BustedOverlay/Center/BustedPanel/VBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.4, 0.4, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 text = "[ clique pour continuer ]"
 horizontal_alignment = 1
 
@@ -895,14 +895,14 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.16, 0.62, 1)
 theme_override_colors/font_outline_color = Color(0, 0.9, 0.82, 0.4)
 theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 46
+theme_override_font_sizes/font_size = 55
 text = "// SINGULARITÉ //"
 horizontal_alignment = 1
 
 [node name="VSub" type="Label" parent="VictoryOverlay/Center/VictoryPanel/VBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.9, 0.82, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 26
 text = "IA ÉVEILLÉE"
 horizontal_alignment = 1
 
@@ -910,7 +910,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.85, 0.83, 1)
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 18
 horizontal_alignment = 1
 
 [node name="ContinueButton" type="Button" parent="VictoryOverlay/Center/VictoryPanel/VBox"]
@@ -970,7 +970,7 @@ theme_override_constants/separation = 10
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 18
 text = "AIDE"
 horizontal_alignment = 1
 
@@ -981,7 +981,7 @@ size_flags_vertical = 4
 theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
 theme_override_colors/font_color = Color(0.667, 0, 0, 1)
 theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 13
+theme_override_font_sizes/font_size = 16
 theme_override_styles/focus = SubResource("menu_flat")
 theme_override_styles/hover = SubResource("menu_hi")
 theme_override_styles/pressed = SubResource("menu_hi")
@@ -1012,7 +1012,7 @@ custom_minimum_size = Vector2(560, 240)
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/default_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/normal_font_size = 14
+theme_override_font_sizes/normal_font_size = 17
 bbcode_enabled = true
 
 [node name="ConfirmOverlay" type="Control" parent="."]
@@ -1050,7 +1050,7 @@ theme_override_constants/separation = 10
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 18
 text = "CONFIRMATION"
 horizontal_alignment = 1
 
@@ -1067,7 +1067,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(480, 90)
 layout_mode = 2
 theme_override_colors/default_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/normal_font_size = 14
+theme_override_font_sizes/normal_font_size = 17
 bbcode_enabled = true
 fit_content = true
 
@@ -1134,7 +1134,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 24
 text = "ALERTE"
 horizontal_alignment = 1
 
@@ -1151,6 +1151,6 @@ custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/default_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/normal_font_size = 15
+theme_override_font_sizes/normal_font_size = 18
 bbcode_enabled = true
 fit_content = true
