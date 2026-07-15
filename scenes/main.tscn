@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://b0ao5i3lv81au"]
+[gd_scene load_steps=14 format=3 uid="uid://b0ao5i3lv81au"]
 
 [ext_resource type="Script" uid="uid://do7n57ox54jv7" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Theme" uid="uid://bip144fg1xtdx" path="res://theme/cyber_theme.tres" id="2_theme"]
@@ -112,6 +112,17 @@ content_margin_left = 28.0
 content_margin_top = 22.0
 content_margin_right = 28.0
 content_margin_bottom = 22.0
+bg_color = Color(0.851, 0.851, 0.851, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 1)
+shadow_color = Color(0, 0, 0, 1)
+shadow_size = 1
+shadow_offset = Vector2(9, 9)
+
+[sub_resource type="StyleBoxFlat" id="modal_box_flush"]
 bg_color = Color(0.851, 0.851, 0.851, 1)
 border_width_left = 1
 border_width_top = 1
@@ -1074,3 +1085,72 @@ text = "Annuler"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Confirmer"
+
+[node name="EventPopup" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Veil" type="ColorRect" parent="EventPopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0.667, 0.92)
+
+[node name="Center" type="CenterContainer" parent="EventPopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Box" type="PanelContainer" parent="EventPopup/Center"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("modal_box_flush")
+
+[node name="VB" type="VBoxContainer" parent="EventPopup/Center/Box"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="EventPopupBar" type="PanelContainer" parent="EventPopup/Center/Box/VB"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="BarH" type="HBoxContainer" parent="EventPopup/Center/Box/VB/EventPopupBar"]
+layout_mode = 2
+
+[node name="EventPopupTitle" type="Label" parent="EventPopup/Center/Box/VB/EventPopupBar/BarH"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "ALERTE"
+horizontal_alignment = 1
+
+[node name="Body" type="MarginContainer" parent="EventPopup/Center/Box/VB"]
+layout_mode = 2
+theme_override_constants/margin_left = 26
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 26
+theme_override_constants/margin_bottom = 20
+
+[node name="EventPopupMsg" type="RichTextLabel" parent="EventPopup/Center/Box/VB/Body"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/default_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/normal_font_size = 15
+bbcode_enabled = true
+fit_content = true

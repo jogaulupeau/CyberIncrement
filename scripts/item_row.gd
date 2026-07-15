@@ -18,6 +18,9 @@ var index: int = -1
 func setup(idx: int) -> void:
 	index = idx
 	buy_button.pressed.connect(_on_buy_pressed)
+	# Pas de focus clavier : sinon le style "focus" reste affiché par-dessus
+	# l'état désactivé après un clic (le bouton a l'air "actif" alors qu'il ne l'est plus).
+	buy_button.focus_mode = Control.FOCUS_NONE
 
 
 # Icône teintée (les SVG sont blancs, donc modulate les colore en néon).

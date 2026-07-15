@@ -34,6 +34,7 @@ const FX_GAIN := Color(0.2, 0.9, 0.3)      # vert : gain / succès
 const FX_ALERT := Color(0.9, 0.12, 0.12)   # rouge : danger / échec
 const FX_SPECIAL := Color(1, 0.8, 0.2)     # ambre : faille, boost, éveil
 const FX_EVENT := Color(0.95, 0.45, 0.1)   # orange : événement aléatoire
+const EVENT_POPUP_DURATION := 3.5      # secondes de lecture forcée (boss/événement) avant reprise
 const TRACE_PER_FAIL := 40.0           # 3 échecs enchaînés (même espacés du cooldown) => TRACÉ
 const TRACE_DECAY := 0.5               # décroissance lente : les échecs "collent" entre les opérations
 const MALUS_MULT := 0.25               # "TRACÉ" : production ×0.25 (soit ÷4)
@@ -340,6 +341,10 @@ const NET_MAX_ZOOM := 2.5
 @onready var confirm_msg: RichTextLabel = %ConfirmMsg
 @onready var confirm_ok: Button = %ConfirmOK
 @onready var confirm_cancel: Button = %ConfirmCancel
+@onready var event_popup: Control = %EventPopup
+@onready var event_popup_bar: PanelContainer = %EventPopupBar
+@onready var event_popup_title: Label = %EventPopupTitle
+@onready var event_popup_msg: RichTextLabel = %EventPopupMsg
 @onready var shop_container: VBoxContainer = %ShopContainer
 @onready var daemons_bar: HBoxContainer = %DaemonsBar
 @onready var daemon_container: VBoxContainer = %DaemonContainer
@@ -414,6 +419,10 @@ func _ready() -> void:
 	confirm_cancel.pressed.connect(_on_confirm_cancel)
 	op_button.pressed.connect(_on_operation_pressed)
 	zeroday_button.pressed.connect(_on_zeroday_pressed)
+	# Pas de focus clavier sur les boutons désactivables dynamiquement : sinon le
+	# style "focus" reste affiché par-dessus l'état désactivé après un clic.
+	prestige_button.focus_mode = Control.FOCUS_NONE
+	op_button.focus_mode = Control.FOCUS_NONE
 
 	cooldown_bar.max_value = OP_COOLDOWN
 	_build_trace_ticks()
@@ -620,6 +629,7 @@ func _setup_menu_item(item: RichTextLabel, base_bb: String, hover_bb: String, ac
 # ---------------------------------------------------------------------------
 
 var _confirm_action := Callable()       # action à exécuter si l'utilisateur confirme
+var event_popup_active := false         # true pendant la popup d'alerte (boss/événement) : jeu en pause
 
 # Affiche le modal. title/message (message en BBCode), texte du bouton OK.
 # danger=true : action destructive -> focus par défaut sur Annuler, OK en rouge.
@@ -650,6 +660,38 @@ func _on_confirm_ok() -> void:
 func _on_confirm_cancel() -> void:
 	confirm_overlay.visible = false
 	_confirm_action = Callable()
+
+
+# ---------------------------------------------------------------------------
+# POPUP D'ALERTE (boss / événement aléatoire) — même famille visuelle que
+# le modal de confirmation, mais SANS bouton : lecture forcée puis reprise
+# automatique. Le jeu est mis en pause (voir event_popup_active) pendant
+# l'affichage, pour que le temps de lecture ne soit pas volé au combat/à
+# l'événement (leur minuteur ne démarre qu'à la fermeture de la popup).
+# ---------------------------------------------------------------------------
+
+func _show_event_popup(title: String, message_bb: String, bar_color: Color) -> void:
+	event_popup_title.text = title
+	event_popup_msg.text = message_bb
+	var bar_style := StyleBoxFlat.new()
+	bar_style.bg_color = bar_color
+	bar_style.content_margin_left = 20.0
+	bar_style.content_margin_right = 20.0
+	bar_style.content_margin_top = 12.0
+	bar_style.content_margin_bottom = 12.0
+	event_popup_bar.add_theme_stylebox_override("panel", bar_style)
+	event_popup_active = true
+	event_popup.visible = true
+	event_popup.modulate.a = 0.0
+	create_tween().tween_property(event_popup, "modulate:a", 1.0, 0.12)
+	get_tree().create_timer(EVENT_POPUP_DURATION).timeout.connect(_hide_event_popup)
+
+
+func _hide_event_popup() -> void:
+	event_popup_active = false
+	var t := create_tween()
+	t.tween_property(event_popup, "modulate:a", 0.0, 0.2)
+	t.tween_callback(func() -> void: event_popup.visible = false)
 
 
 func _open_help() -> void:
@@ -781,6 +823,7 @@ func _build_daemon_buttons() -> void:
 		var btn := Button.new()
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.tooltip_text = _daemon_desc(d)
+		btn.focus_mode = Control.FOCUS_NONE   # pas de style "focus" persistant sur bouton désactivé
 		btn.pressed.connect(_activate_daemon.bind(i))   # bind : passe l'index au callback
 		daemons_bar.add_child(btn)
 		daemon_buttons.append(btn)
@@ -905,6 +948,8 @@ func _setup_autosave() -> void:
 
 
 func _process(delta: float) -> void:
+	if event_popup_active:
+		return                              # jeu en pause : lecture forcée de la popup d'alerte
 	play_time += delta
 	_earn(production_per_second() * delta)
 	# Auto-clic : chaque "clic auto" vaut autant qu'un clic manuel.
@@ -1125,6 +1170,8 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	# Raccourcis "touches de fonction" façon DOS (annoncés dans la barre de statut).
+	if event_popup_active:
+		return                              # clavier en pause pendant la popup d'alerte
 	if event.keycode == KEY_F1:
 		if help_overlay.visible:
 			_close_help()
@@ -1351,10 +1398,10 @@ func _start_random_event() -> void:
 	match event_id:
 		"instabilite":
 			_play_sfx("glitch")
-			_show_toast("INSTABILITÉ CONNEXION", "La commande est brouillée pendant %d s — tape à l'instinct !" % int(EVENT_DURATION), TOAST_EVENT, 5.0)
+			_show_event_popup("INSTABILITÉ CONNEXION", "La commande est brouillée pendant %d s — tape à l'instinct !" % int(EVENT_DURATION), FX_EVENT)
 		"surcharge":
 			_play_sfx("overload")
-			_show_toast("SURCHARGE RÉSEAU", "Production réduite pendant %d s." % int(EVENT_DURATION), TOAST_EVENT, 5.0)
+			_show_event_popup("SURCHARGE RÉSEAU", "Production réduite pendant %d s." % int(EVENT_DURATION), FX_EVENT)
 
 
 func _end_event() -> void:
@@ -1658,7 +1705,7 @@ func _start_boss() -> void:
 	boss_title.text = "/// %s ///" % boss_type.name
 	_flash(FX_ALERT, 0.4)
 	_play_sfx("boss")
-	_show_toast(boss_type.name + " DÉTECTÉ", boss_type.desc, TOAST_ALERT, 5.0)
+	_show_event_popup(boss_type.name + " DÉTECTÉ", boss_type.desc, FX_ALERT)
 	_set_status("%s détecté ! %s" % [boss_type.name, boss_type.desc])
 
 
