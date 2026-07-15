@@ -498,7 +498,7 @@ func _unlock_feature(feature: String, announce_name: String, help: String) -> vo
 	unlocked[feature] = true
 	_apply_gating()
 	_play_sfx("unlock")
-	_show_toast("DÉBLOQUÉ : %s" % announce_name, help, TOAST_SYS, 4.0)
+	_show_toast("DÉBLOQUÉ : %s" % announce_name, help, TOAST_SYS, 5.0)
 
 
 # Entrées "mystère" de la boutique (en haut de l'onglet Augmentations).
@@ -547,7 +547,15 @@ func _owned_unlock_ids() -> Array:
 # AIDE (P3)
 # ---------------------------------------------------------------------------
 
+var _help_active_style: StyleBoxFlat    # style du thème d'aide sélectionné (bloc bleu DOS)
+
 func _build_help_topics() -> void:
+	# Style de sélection : bloc bleu plein, comme une entrée surlignée sous DOS.
+	_help_active_style = _make_flat(Color(0, 0, 0.8), Color(0, 0, 0), 1, Vector2(4, 4))
+	_help_active_style.content_margin_left = 14.0
+	_help_active_style.content_margin_right = 14.0
+	_help_active_style.content_margin_top = 6.0
+	_help_active_style.content_margin_bottom = 6.0
 	for i in help_topics.size():
 		var btn := Button.new()
 		btn.text = help_topics[i].label
@@ -658,7 +666,20 @@ func _open_help() -> void:
 
 func _show_help_topic(i: int) -> void:
 	var t: Dictionary = help_topics[i]
-	help_text.text = "[color=#00e6d9]%s[/color]\n\n%s" % [t.title, t.text]
+	help_text.text = "[color=#000080]%s[/color]\n\n%s" % [t.title, t.text]
+	# Le thème actif passe en bloc bleu / texte blanc (sélection façon DOS).
+	for j in help_buttons.size():
+		var b := help_buttons[j]
+		if j == i:
+			b.add_theme_stylebox_override("normal", _help_active_style)
+			b.add_theme_stylebox_override("hover", _help_active_style)
+			b.add_theme_color_override("font_color", Color(1, 1, 1))
+			b.add_theme_color_override("font_hover_color", Color(1, 1, 1))
+		else:
+			b.remove_theme_stylebox_override("normal")
+			b.remove_theme_stylebox_override("hover")
+			b.remove_theme_color_override("font_color")
+			b.remove_theme_color_override("font_hover_color")
 
 
 func _close_help() -> void:
@@ -1326,10 +1347,10 @@ func _start_random_event() -> void:
 	match event_id:
 		"instabilite":
 			_play_sfx("glitch")
-			_show_toast("INSTABILITÉ CONNEXION", "La commande est brouillée pendant %d s — tape à l'instinct !" % int(EVENT_DURATION), TOAST_EVENT, 3.0)
+			_show_toast("INSTABILITÉ CONNEXION", "La commande est brouillée pendant %d s — tape à l'instinct !" % int(EVENT_DURATION), TOAST_EVENT, 5.0)
 		"surcharge":
 			_play_sfx("overload")
-			_show_toast("SURCHARGE RÉSEAU", "Production réduite pendant %d s." % int(EVENT_DURATION), TOAST_EVENT, 3.0)
+			_show_toast("SURCHARGE RÉSEAU", "Production réduite pendant %d s." % int(EVENT_DURATION), TOAST_EVENT, 5.0)
 
 
 func _end_event() -> void:
@@ -1337,7 +1358,7 @@ func _end_event() -> void:
 	event_id = ""
 	event_spawn_timer = randf_range(EVENT_SPAWN_MIN, EVENT_SPAWN_MAX)
 	_play_sfx("stable", -4.0)
-	_show_toast("RÉSEAU STABILISÉ", "Retour à la normale.", TOAST_WIN, 2.0)
+	_show_toast("RÉSEAU STABILISÉ", "Retour à la normale.", TOAST_WIN, 5.0)
 
 
 # Brouillage déterministe qui change ~8x/seconde (lettres qui clignotent).
@@ -1633,7 +1654,7 @@ func _start_boss() -> void:
 	boss_title.text = "/// %s ///" % boss_type.name
 	_flash(FX_ALERT, 0.4)
 	_play_sfx("boss")
-	_show_toast(boss_type.name + " DÉTECTÉ", boss_type.desc, TOAST_ALERT, 3.8)
+	_show_toast(boss_type.name + " DÉTECTÉ", boss_type.desc, TOAST_ALERT, 5.0)
 	_set_status("%s détecté ! %s" % [boss_type.name, boss_type.desc])
 
 
@@ -1655,7 +1676,7 @@ func _defeat_boss() -> void:
 	_flash(FX_GAIN, 0.5)
 	_spawn_floating_text("FIREWALL BRISÉ !  +%d o  +%d Frag" % [int(reward), frag_reward], _center_of(terminal), FX_GAIN)
 	_burst_particles(_center_of(terminal))
-	_show_toast("FIREWALL BRISÉ  (Nv %d)" % boss_level, "Butin : +%d o     •     +%d Fragment(s)" % [int(reward), frag_reward], TOAST_WIN, 3.0)
+	_show_toast("FIREWALL BRISÉ  (Nv %d)" % boss_level, "Butin : +%d o     •     +%d Fragment(s)" % [int(reward), frag_reward], TOAST_WIN, 5.0)
 	_set_status("Firewall Nv %d brisé ! +%d o, +%d Fragment(s)." % [boss_level, int(reward), frag_reward])
 
 
@@ -1665,7 +1686,7 @@ func _fail_boss() -> void:
 	firewall_malus_remaining = FIREWALL_MALUS_DURATION
 	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
 	_flash(FX_ALERT, 0.5)
-	_show_toast("FIREWALL NON BRISÉ", "Contre-attaque : production /%d pendant %d s" % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)], TOAST_ALERT, 3.0)
+	_show_toast("FIREWALL NON BRISÉ", "Contre-attaque : production /%d pendant %d s" % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)], TOAST_ALERT, 5.0)
 	_set_status("Firewall non brisé ! Contre-attaque : production /%d pendant %d s." % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)])
 
 
@@ -1901,7 +1922,7 @@ func _on_network_node(index: int) -> void:
 	_apply_network_node(n)
 	_play_sfx("buy", -3.0, _buy_pitch_step(_network_owned_count()))
 	_flash(FX_GAIN, 0.3)
-	_show_toast("NŒUD PIRATÉ", _network_node_desc(n), TOAST_WIN, 2.4)
+	_show_toast("NŒUD PIRATÉ", _network_node_desc(n), TOAST_WIN, 5.0)
 	_update_display()
 
 
@@ -2048,7 +2069,7 @@ func _do_prestige() -> void:
 	if not unlocked.augment:
 		unlocked.augment = true
 		_apply_gating()
-		_show_toast("NOUVELLE SECTION", "Augmentations débloquées — dépense tes Fragments d'IA (onglet Augmentations).", TOAST_FRAG, 3.5)
+		_show_toast("NOUVELLE SECTION", "Augmentations débloquées — dépense tes Fragments d'IA (onglet Augmentations).", TOAST_FRAG, 5.0)
 	# Reset de la RUN uniquement. Les items (payés en fragments) restent.
 	data = 0.0
 	run_earned = 0.0

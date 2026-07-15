@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3 uid="uid://b0ao5i3lv81au"]
+[gd_scene load_steps=13 format=3 uid="uid://b0ao5i3lv81au"]
 
 [ext_resource type="Script" uid="uid://do7n57ox54jv7" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Theme" uid="uid://bip144fg1xtdx" path="res://theme/cyber_theme.tres" id="2_theme"]
@@ -84,20 +84,28 @@ shadow_color = Color(0, 0.9, 0.82, 0.4)
 shadow_size = 14
 
 [sub_resource type="StyleBoxFlat" id="help_panel"]
-content_margin_left = 26.0
-content_margin_top = 20.0
-content_margin_right = 26.0
-content_margin_bottom = 20.0
-bg_color = Color(0.04, 0.07, 0.09, 0.99)
+bg_color = Color(0.851, 0.851, 0.851, 1)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0, 0.6, 0.55, 0.9)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+border_color = Color(0, 0, 0, 1)
+shadow_color = Color(0, 0, 0, 1)
+shadow_size = 1
+shadow_offset = Vector2(9, 9)
+
+[sub_resource type="StyleBoxEmpty" id="menu_flat"]
+content_margin_left = 10.0
+content_margin_top = 2.0
+content_margin_right = 10.0
+content_margin_bottom = 2.0
+
+[sub_resource type="StyleBoxFlat" id="menu_hi"]
+content_margin_left = 10.0
+content_margin_top = 2.0
+content_margin_right = 10.0
+content_margin_bottom = 2.0
+bg_color = Color(0, 0, 0.8, 1)
 
 [sub_resource type="StyleBoxFlat" id="modal_box"]
 content_margin_left = 28.0
@@ -439,7 +447,7 @@ mouse_filter = 2
 layout_mode = 2
 theme_override_colors/font_color = Color(0.333, 1, 0.333, 1)
 theme_override_font_sizes/font_size = 13
-text = "A:\\NEXUS>"
+text = "A:\\>"
 
 [node name="CommandLabel" type="RichTextLabel" parent="HUD/Root/Body/Left/Terminal/TVBox/TCommand"]
 unique_name_in_owner = true
@@ -918,7 +926,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-color = Color(0, 0.02, 0.03, 0.7)
+color = Color(0, 0, 0.667, 0.9)
 
 [node name="Center" type="CenterContainer" parent="HelpOverlay"]
 layout_mode = 1
@@ -937,36 +945,62 @@ theme_override_styles/panel = SubResource("help_panel")
 [node name="VBox" type="VBoxContainer" parent="HelpOverlay/Center/HelpPanel"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 0
 
-[node name="Header" type="HBoxContainer" parent="HelpOverlay/Center/HelpPanel/VBox"]
+[node name="Header" type="PanelContainer" parent="HelpOverlay/Center/HelpPanel/VBox"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("bar_cyan")
+
+[node name="H" type="HBoxContainer" parent="HelpOverlay/Center/HelpPanel/VBox/Header"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="HelpTitle" type="Label" parent="HelpOverlay/Center/HelpPanel/VBox/Header"]
+[node name="HelpTitle" type="Label" parent="HelpOverlay/Center/HelpPanel/VBox/Header/H"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0, 0.9, 0.82, 1)
-theme_override_font_sizes/font_size = 22
-text = "// AIDE //"
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 15
+text = "AIDE"
+horizontal_alignment = 1
 
-[node name="CloseButton" type="Button" parent="HelpOverlay/Center/HelpPanel/VBox/Header"]
+[node name="CloseButton" type="Button" parent="HelpOverlay/Center/HelpPanel/VBox/Header/H"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Fermer"
+size_flags_vertical = 4
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.667, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 13
+theme_override_styles/focus = SubResource("menu_flat")
+theme_override_styles/hover = SubResource("menu_hi")
+theme_override_styles/pressed = SubResource("menu_hi")
+theme_override_styles/normal = SubResource("menu_flat")
+text = "[X] Fermer"
 
-[node name="HelpTopics" type="HFlowContainer" parent="HelpOverlay/Center/HelpPanel/VBox"]
+[node name="Body" type="MarginContainer" parent="HelpOverlay/Center/HelpPanel/VBox"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="BVB" type="VBoxContainer" parent="HelpOverlay/Center/HelpPanel/VBox/Body"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HelpTopics" type="HFlowContainer" parent="HelpOverlay/Center/HelpPanel/VBox/Body/BVB"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(560, 0)
 layout_mode = 2
 theme_override_constants/h_separation = 6
 theme_override_constants/v_separation = 6
 
-[node name="HelpText" type="RichTextLabel" parent="HelpOverlay/Center/HelpPanel/VBox"]
+[node name="HelpText" type="RichTextLabel" parent="HelpOverlay/Center/HelpPanel/VBox/Body/BVB"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(560, 240)
 layout_mode = 2
 mouse_filter = 2
+theme_override_colors/default_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/normal_font_size = 14
 bbcode_enabled = true
 
