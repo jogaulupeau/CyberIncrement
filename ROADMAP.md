@@ -133,6 +133,14 @@ Points de design à trancher au moment de coder :
 - [x] **Documentation** : `README.md` (référence état actuel : jouer, mécaniques, architecture,
       build, réglages, crédits). `ROADMAP.md` = historique.
 
+- [x] **Rééquilibrage boss/intrusion (2026-07-15)** : l'échec d'un boss ne déclenche plus la
+      contre-attaque "production /2" (retirée : `firewall_malus_remaining`/`FIREWALL_MALUS_*`
+      supprimés) mais fait monter le **traçage de +60 %** (`BOSS_FAIL_TRACE`), pouvant déclencher
+      une intrusion immédiate — sanction unique et cohérente avec le reste du système de traçage.
+      Comme l'intrusion devient plus fréquente, la commande d'évasion n'est plus fixe
+      ("purge logs") mais tirée au hasard dans un pool de 8 (`ESCAPE_COMMANDS`, longueurs
+      comparables) pour éviter le réflexe mécanique.
+
 ## Idées de contenu (à trier plus tard)
 - Générateurs : Script auto → Botnet → Ferme de serveurs → IA distribuée…
 - Améliorations (upgrades) : multiplient la production ou le gain par clic.

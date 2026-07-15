@@ -51,9 +51,10 @@ Un nouveau joueur ne voit qu'un jeu épuré ; les mécaniques se révèlent au f
 
 - **Frappe / combo** : commandes normales (`COMMANDS`, 20) + rares (`COMMANDS_RARE`, 11). Combo →
   production ×(1+5 %/palier) + bonus de complétion. Faute → combo cassé + traçage.
-- **Traçage & intrusion** : les fautes (et échecs d'opérations) remplissent la jauge. À 100 % →
-  **INTRUSION** : taper `purge logs` avant la fin du chrono. Échec → écran **TRACÉ (BUSTED)** :
-  **toutes les Données effacées** + production /4 un moment.
+- **Traçage & intrusion** : les fautes, les échecs d'opérations et les **boss non vaincus (+60 %)**
+  remplissent la jauge. À 100 % → **INTRUSION** : taper la commande d'évasion affichée (tirée au
+  hasard dans `ESCAPE_COMMANDS`, différente à chaque fois) avant la fin du chrono. Échec → écran
+  **TRACÉ (BUSTED)** : **toutes les Données effacées** + production /4 un moment.
 - **Générateurs** : 4 types, coût exponentiel (×1,15), reset au prestige.
 - **Prestige** : Fragments = `floor(sqrt(run_earned / PRESTIGE_DIV))`, +10 %/fragment de prod.
 - **Augmentations** (items, payés en Fragments, permanents) : prod_mult, click_mult, cost_reduc,
@@ -65,7 +66,8 @@ Un nouveau joueur ne voit qu'un jeu épuré ; les mécaniques se révèlent au f
 - **Boss** (`BOSS_TYPES`, tirés au hasard toutes les ~2-3 min, uniquement si Opérations débloquées) :
   on les brise en tapant des commandes (dégâts). 5 types avec contraintes :
   FIREWALL (standard), EDR (rares only), ANALYSTE SOC (faute = soin), CHIFFREMENT SSL (brouillage),
-  ANTI-DDOS (dégâts fixes, volume). Victoire = butin (× production) + Fragment.
+  ANTI-DDOS (dégâts fixes, volume). Victoire = butin (× production) + Fragment. Échec = **traçage
+  +60 %** (peut déclencher une intrusion immédiate si la jauge est déjà haute).
 - **Carte du réseau** (onglet Réseau) : graphe **procédural roguelike** régénéré à chaque prestige,
   conquis de proche en proche (fog of war). Nœuds payés en Données, bonus prod/click/cost ou one-shot
   data/frag. Zoom molette + déplacement clic-glissé.
@@ -178,11 +180,12 @@ Godot_v4.4.1-stable_win64_console.exe --headless --path . --export-release "Wind
   (boost de production).
 - Rares : `RARE_COMBO_THRESHOLD` (4), `RARE_BONUS_MULT` (2.5).
 - Traçage/intrusion : `TRACE_PER_FAIL` (40), `TRACE_DECAY` (0.5), `WRONG_KEY_TRACE` (6),
-  `MALUS_MULT`/`MALUS_DURATION`, `INTRUSION_TIME` (6 s).
+  `MALUS_MULT`/`MALUS_DURATION`, `INTRUSION_TIME` (6 s), `ESCAPE_COMMANDS` (pool de commandes
+  d'évasion tirées au hasard).
 - Opérations : `OP_COOLDOWN`, `OP_SUCCESS_CHANCE` (0.70), `OP_REWARD_SECONDS` (30).
 - Failles : `ZERODAY_*`.
 - Boss : `FIREWALL_*` (base HP, croissance, butin), `BOSS_TYPES` (hp_mult/time/gimmick par type),
-  `BOSS_TYPO_HEAL`, `BOSS_THROTTLE_DMG`.
+  `BOSS_TYPO_HEAL`, `BOSS_THROTTLE_DMG`, `BOSS_FAIL_TRACE` (60, traçage gagné à l'échec).
 - Réseau : `NETWORK_RINGS`, `NETWORK_COST_BASE`/`GROWTH`, `_node_value()`.
 - Événements : `EVENT_SPAWN_MIN/MAX`, `EVENT_DURATION`, `EVENT_SURCHARGE_MULT`.
 - Déblocages : seuils/coûts dans le tableau `unlocks`. Daemons : `frag_base`/`frag_growth` par daemon.

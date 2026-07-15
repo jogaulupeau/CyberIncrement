@@ -107,9 +107,22 @@ const RARE_BONUS_MULT := 2.5           # bonus des commandes rares (× en plus d
 # Malus de frappe : une mauvaise touche casse le combo et fait monter le traçage.
 const WRONG_KEY_TRACE := 6.0
 
-# Contre-mesure : à 100% de traçage, on a INTRUSION_TIME secondes pour taper ESCAPE_COMMAND.
+# Contre-mesure : à 100% de traçage, on a INTRUSION_TIME secondes pour taper une commande
+# d'évasion. Tirée au hasard dans ESCAPE_COMMANDS à chaque déclenchement (longueurs proches,
+# pour que la difficulté reste comparable d'un tirage à l'autre) : avec l'intrusion qui devient
+# plus fréquente (les boss peuvent la déclencher), une commande fixe deviendrait un réflexe
+# mécanique plutôt qu'une vraie lecture/frappe.
 const INTRUSION_TIME := 6.0
-const ESCAPE_COMMAND := "purge logs"
+const ESCAPE_COMMANDS := [
+	"purge logs",
+	"flush trace",
+	"kill session",
+	"wipe audit",
+	"drop uplink",
+	"reset alarm",
+	"kill netstat",
+	"clear cache",
+]
 
 # Objectif de fin : rassembler AWAKEN_TARGET Fragments (cumulés), puis taper la
 # commande d'éveil pour atteindre la Singularité (victoire).
@@ -132,8 +145,7 @@ const FIREWALL_SPAWN_MAX := 180.0
 const FIREWALL_TIME := 28.0           # temps pour le briser
 const FIREWALL_BASE_HP := 120.0       # PV du 1er firewall (dégâts = longueur des commandes)
 const FIREWALL_HP_GROWTH := 0.5       # +50% de PV par firewall vaincu
-const FIREWALL_MALUS_MULT := 0.5      # contre-attaque en cas d'échec : production /2
-const FIREWALL_MALUS_DURATION := 15.0
+const BOSS_FAIL_TRACE := 60.0         # boss non vaincu : traçage +60% (peut déclencher l'intrusion)
 const FIREWALL_REWARD_SECONDS := 90.0 # butin de base = X secondes de production
 const FIREWALL_REWARD_LEVEL_STEP := 0.5 # +50% de butin par firewall déjà vaincu
 const FIREWALL_COMBO_STEP := 0.05     # +5% de butin par palier de combo au moment de la victoire
@@ -231,7 +243,7 @@ var help_topics: Array[Dictionary] = [
 		"text": "Achète-les avec des Données : ils produisent automatiquement, en continu. Le coût augmente à chaque achat. Ils sont remis à zéro quand tu compiles l'IA (prestige)." },
 	{ "id": "tracage", "label": "Traçage", "gate": "",
 		"title": "Traçage & intrusion",
-		"text": "Les fautes de frappe (et les opérations ratées) remplissent la jauge de TRAÇAGE. À 100 %, une INTRUSION se déclenche : une commande d'urgence 'purge logs' apparaît, tape-la vite pour t'échapper. Si le chrono s'écoule, tu PERDS toutes tes Données et ta production est divisée par 4 un moment. La jauge redescend doucement si tu joues prudemment." },
+		"text": "Les fautes de frappe, les opérations ratées et les boss non vaincus (+60 %) remplissent la jauge de TRAÇAGE. À 100 %, une INTRUSION se déclenche : une commande d'urgence apparaît (différente à chaque fois), tape-la vite pour t'échapper. Si le chrono s'écoule, tu PERDS toutes tes Données et ta production est divisée par 4 un moment. La jauge redescend doucement si tu joues prudemment." },
 	{ "id": "prestige", "label": "Prestige", "gate": "",
 		"title": "Compiler l'IA (prestige)",
 		"text": "Sacrifie ta run en cours (Données + générateurs remis à zéro) contre des FRAGMENTS D'IA, permanents. Chaque Fragment donne +10 % de production pour toujours, et sert à débloquer/acheter dans les autres onglets. Objectif final : rassembler assez de Fragments pour ÉVEILLER l'IA." },
@@ -246,7 +258,7 @@ var help_topics: Array[Dictionary] = [
 		"text": "Des capacités actives, déclenchées au clic. Débloque-les et améliore-les avec des Fragments (onglet Programmes).\n• AUTOPWN : pendant sa durée, TOUTE touche valide la commande (martèle le clavier).\n• GHOST : efface instantanément le traçage (coûte des Fragments à chaque usage).\n• OVERCLOCK : production ×3 un moment. Astuce : garde-le pour le coup fatal d'un boss." },
 	{ "id": "boss", "label": "Boss", "gate": "operations",
 		"title": "Boss (défenses)",
-		"text": "Périodiquement, une défense apparaît avec des PV et un chrono. Complète des commandes pour la briser avant la fin : gros butin + un Fragment. Échec = contre-attaque (production réduite). Chaque type a sa contrainte :\n• FIREWALL : standard (dégâts = longueur).\n• EDR : seules les commandes RARES l'endommagent.\n• ANALYSTE SOC : blindé, une faute de frappe le soigne (sois précis).\n• CHIFFREMENT SSL : commandes brouillées (à l'aveugle).\n• ANTI-DDOS : dégâts fixes par commande — enchaîne le VOLUME (AUTOPWN idéal)." },
+		"text": "Périodiquement, une défense apparaît avec des PV et un chrono. Complète des commandes pour la briser avant la fin : gros butin + un Fragment. Échec = TRAÇAGE +60 % (peut déclencher une intrusion immédiate si la jauge est déjà haute). Chaque type a sa contrainte :\n• FIREWALL : standard (dégâts = longueur).\n• EDR : seules les commandes RARES l'endommagent.\n• ANALYSTE SOC : blindé, une faute de frappe le soigne (sois précis).\n• CHIFFREMENT SSL : commandes brouillées (à l'aveugle).\n• ANTI-DDOS : dégâts fixes par commande — enchaîne le VOLUME (AUTOPWN idéal)." },
 	{ "id": "network", "label": "Réseau", "gate": "network",
 		"title": "Carte du réseau",
 		"text": "Un graphe de nœuds à pirater de proche en proche (tu ne peux prendre qu'un nœud voisin d'un nœud déjà conquis). Les nœuds coûtent des Données mais donnent des bonus (production, clic, coût) ou des paquets de Données/Fragments. La carte se régénère à chaque prestige. Molette = zoom, clic-glissé = déplacer." },
@@ -264,7 +276,6 @@ var boss_timer: float = 0.0            # temps restant pour le briser
 var boss_level: int = 0               # nombre de firewalls déjà vaincus (difficulté/récompense)
 var boss_type: Dictionary = {}        # type du boss en cours (voir BOSS_TYPES)
 var boss_spawn_timer: float = 0.0      # compte à rebours avant le prochain firewall
-var firewall_malus_remaining: float = 0.0  # contre-attaque en cours (prod /2)
 
 # --- Générateurs (achetés en Données, remis à zéro au prestige) --------------
 var generators: Array[Dictionary] = [
@@ -1003,10 +1014,6 @@ func _update_timers(delta: float) -> void:
 			if event_spawn_timer <= 0.0:
 				_start_random_event()
 
-	# Contre-attaque du firewall (production /2 temporaire).
-	if firewall_malus_remaining > 0.0:
-		firewall_malus_remaining = maxf(0.0, firewall_malus_remaining - delta)
-
 	# Boss firewall : apparition périodique, puis compte à rebours pour le briser.
 	if boss_active:
 		boss_timer -= delta
@@ -1049,8 +1056,6 @@ func event_multiplier() -> float:
 		m *= MALUS_MULT
 	if _daemon_active("overclock"):
 		m *= OVERCLOCK_MULT
-	if firewall_malus_remaining > 0.0:
-		m *= FIREWALL_MALUS_MULT
 	if event_active and event_id == "surcharge":
 		m *= EVENT_SURCHARGE_MULT
 	return m
@@ -1522,13 +1527,13 @@ func _start_intrusion() -> void:
 		return
 	intrusion_active = true
 	intrusion_timer = INTRUSION_TIME
-	current_command = ESCAPE_COMMAND    # la commande à taper devient la purge
+	current_command = ESCAPE_COMMANDS[randi() % ESCAPE_COMMANDS.size()]  # tirée au hasard
 	typed_len = 0
 	current_is_rare = false
 	combo = 0
 	_flash(FX_ALERT, 0.45)
 	_play_sfx("alert")
-	_set_status("INTRUSION DÉTECTÉE ! Tape « %s » avant la fin du compte à rebours !" % ESCAPE_COMMAND)
+	_set_status("INTRUSION DÉTECTÉE ! Tape « %s » avant la fin du compte à rebours !" % current_command)
 
 
 # Réussite : logs purgés, on évite complètement le malus.
@@ -1734,11 +1739,14 @@ func _defeat_boss() -> void:
 func _fail_boss() -> void:
 	boss_active = false
 	boss_panel.visible = false
-	firewall_malus_remaining = FIREWALL_MALUS_DURATION
 	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
+	# Échec = traçage +60% (peut déclencher directement une intrusion si déjà haut).
+	trace = minf(TRACE_MAX, trace + BOSS_FAIL_TRACE)
 	_flash(FX_ALERT, 0.5)
-	_show_toast("FIREWALL NON BRISÉ", "Contre-attaque : production /%d pendant %d s" % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)], TOAST_ALERT, 5.0)
-	_set_status("Firewall non brisé ! Contre-attaque : production /%d pendant %d s." % [int(1.0 / FIREWALL_MALUS_MULT), int(FIREWALL_MALUS_DURATION)])
+	_show_toast("FIREWALL NON BRISÉ", "Traçage +%d%%" % int(BOSS_FAIL_TRACE), TOAST_ALERT, 5.0)
+	_set_status("Firewall non brisé ! Traçage +%d%%." % int(BOSS_FAIL_TRACE))
+	if trace >= TRACE_MAX:
+		_start_intrusion()
 
 
 # ---------------------------------------------------------------------------
@@ -2155,7 +2163,6 @@ func _do_prestige() -> void:
 	combo = 0
 	intrusion_active = false
 	boss_active = false
-	firewall_malus_remaining = 0.0
 	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
 	_regenerate_network()               # roguelike : une nouvelle carte à chaque prestige
 	_pick_new_command()
@@ -2318,7 +2325,6 @@ func _do_reset() -> void:
 	_apply_gating()
 	boss_active = false
 	boss_level = 0
-	firewall_malus_remaining = 0.0
 	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
 	for d in daemons:
 		d.level = 0
@@ -2464,10 +2470,6 @@ func _update_display() -> void:
 		if status_txt != "":
 			status_txt += "     "
 		status_txt += "TRACÉ : prod /%d (%d s)" % [int(1.0 / MALUS_MULT), int(ceil(malus_remaining))]
-	if firewall_malus_remaining > 0.0:
-		if status_txt != "":
-			status_txt += "     "
-		status_txt += "FIREWALL : prod /%d (%d s)" % [int(1.0 / FIREWALL_MALUS_MULT), int(ceil(firewall_malus_remaining))]
 	if event_active:
 		if status_txt != "":
 			status_txt += "     "
