@@ -1214,6 +1214,12 @@ func _on_terminal_input(event: InputEvent) -> void:
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
+	# Plein écran : action "fenêtre système", jamais bloquée (même par une popup/un écran plein).
+	if event.keycode == KEY_F11:
+		var w := get_window()
+		w.mode = Window.MODE_WINDOWED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
+		get_viewport().set_input_as_handled()
+		return
 	# Raccourcis "touches de fonction" façon DOS (annoncés dans la barre de statut).
 	if event_popup_active:
 		return                              # clavier en pause pendant la popup d'alerte
@@ -2490,7 +2496,7 @@ func _update_display() -> void:
 		objective_label.add_theme_color_override("font_color", Color(1, 0.81, 0.25))
 	else:
 		objective_label.text = "OBJECTIF — Éveil de l'IA : %d / %d Fragments cumulés" % [total_fragments_earned, AWAKEN_TARGET]
-		objective_label.add_theme_color_override("font_color", Color(0.7, 0.6, 0.35))
+		objective_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25))
 
 	# Bouton explicite, même quand on ne peut pas encore compiler.
 	if pending >= 1:

@@ -17,8 +17,11 @@ frappe est le cœur du gameplay actif.
   (Godot est installé chez le dev à `C:\Users\jogau\Desktop\Dev Jeux\`.)
 - **Exécutable** : `build/CyberIncrement.exe` — fichier unique autonome (`.pck` embarqué), lançable
   d'un double-clic, partageable sans Godot.
-- Fenêtre par défaut : **1498×842** (16:9), `stretch = canvas_items` / `aspect = expand` (tout s'adapte
-  au redimensionnement). Réglable dans `project.godot` → `window/size/...`.
+- Fenêtre par défaut : **1498×842** (16:9), `stretch = canvas_items` / `aspect = expand` (chaque
+  élément, texte compris, est redessiné à la taille réelle — reste net à toute résolution, y
+  compris en plein écran ; `viewport` a été essayé mais dessine le jeu une fois en petit puis
+  agrandit l'image finie, ce qui rend le texte flou). Réglable dans `project.godot` →
+  `window/size/...`. **F11** = plein écran.
 
 ## Comment jouer (boucle de jeu)
 
@@ -33,8 +36,8 @@ frappe est le cœur du gameplay actif.
    écran de **Singularité** (victoire) → mode libre.
 
 **Contrôles** : clavier (frappe des commandes), souris (achats, onglets, boutons ; molette = zoom carte
-réseau, clic-glissé = déplacer la carte). Boutons bas : **SON** (mute), **slider VOL**, **? AIDE**,
-**Sauvegarder**, **Réinitialiser**.
+réseau, clic-glissé = déplacer la carte). Raccourcis : **F1** Aide, **F5** Sauvegarder,
+**F11** Plein écran. Barre de menu : **Aide**, **Sauver**, **Réinitialiser**, **Stats**.
 
 ## Onboarding progressif (déblocage des mécaniques)
 

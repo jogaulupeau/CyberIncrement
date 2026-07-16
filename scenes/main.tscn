@@ -709,7 +709,7 @@ theme_override_constants/separation = 12
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 14
-text = "F1=Aide  F5=Sauver"
+text = "F1=Aide  F5=Sauver  F11=Plein écran"
 
 [node name="StatusLabel" type="Label" parent="HUD/Root/StatusBar/H"]
 unique_name_in_owner = true
@@ -935,6 +935,7 @@ text = "Continuer (mode libre)"
 
 [node name="HelpOverlay" type="Control" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
