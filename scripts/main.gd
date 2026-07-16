@@ -193,6 +193,13 @@ var final_command_active: bool = false # la commande affichée est-elle celle de
 var prestige_count: int = 0            # nombre de prestiges (pour le récap)
 var play_time: float = 0.0             # temps de jeu cumulé (pour le récap)
 
+# Statistiques / records (écran STATS, cumulés sur toute la partie, remis à zéro
+# uniquement par une réinitialisation complète — pas par un prestige).
+var best_combo: int = 0                # plus haut combo jamais atteint
+var total_commands_typed: int = 0      # nombre de commandes complétées (normales + rares)
+var total_rare_typed: int = 0          # dont commandes rares
+var best_run_earned: float = 0.0       # meilleure run (Données accumulées avant reset/prestige)
+
 # Événements aléatoires.
 var event_active: bool = false
 var event_id: String = ""
@@ -262,9 +269,12 @@ var help_topics: Array[Dictionary] = [
 	{ "id": "network", "label": "Réseau", "gate": "network",
 		"title": "Carte du réseau",
 		"text": "Un graphe de nœuds à pirater de proche en proche (tu ne peux prendre qu'un nœud voisin d'un nœud déjà conquis). Les nœuds coûtent des Données mais donnent des bonus (production, clic, coût) ou des paquets de Données/Fragments. La carte se régénère à chaque prestige. Molette = zoom, clic-glissé = déplacer." },
+	{ "id": "stats", "label": "Stats", "gate": "",
+		"title": "Statistiques",
+		"text": "" },
 	{ "id": "about", "label": "À propos", "gate": "",
 		"title": "À propos",
-		"text": "Cyber Increment — version %s\n\nAuteur : %s\n© %s %s\nLicence : %s\n\nCe jeu est distribué sous licence Creative Commons Attribution - Pas d'Utilisation Commerciale 4.0 (CC BY-NC 4.0) : tu peux le partager et le modifier à condition d'en créditer l'auteur et de ne pas en faire un usage commercial.\n\nMoteur : Godot Engine 4.4.1. Icônes : game-icons.net (CC BY 3.0). Police : Share Tech Mono (SIL OFL)." % [GAME_VERSION, GAME_AUTHOR, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE] },
+		"text": "Cyber Increment — version %s\n\nAuteur : %s\n© %s %s\nLicence : %s\n\nCe jeu est distribué sous licence Creative Commons Attribution - Pas d'Utilisation Commerciale 4.0 (CC BY-NC 4.0) : tu peux le partager et le modifier à condition d'en créditer l'auteur et de ne pas en faire un usage commercial.\n\nMoteur : Godot Engine 4.4.1. Icônes : game-icons.net (CC BY 3.0). Police : VT323 (SIL OFL)." % [GAME_VERSION, GAME_AUTHOR, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE] },
 ]
 var help_buttons: Array[Button] = []
 
@@ -400,6 +410,7 @@ const NET_MAX_ZOOM := 2.5
 @onready var help_close_button: Button = %CloseButton
 @onready var save_button: RichTextLabel = %SaveButton
 @onready var reset_button: RichTextLabel = %ResetButton
+@onready var stats_button: RichTextLabel = %StatsButton
 @onready var about_label: Label = %AboutLabel
 @onready var title_ver: Label = %TitleVer
 @onready var status_label: Label = %StatusLabel
@@ -417,6 +428,7 @@ func _ready() -> void:
 	_setup_menu_item(help_button, "[color=#aa0000]A[/color]ide", "[color=#ffffff]Aide[/color]", _open_help)
 	_setup_menu_item(save_button, "[color=#aa0000]S[/color]auver", "[color=#ffffff]Sauver[/color]", _on_save_pressed)
 	_setup_menu_item(reset_button, "[color=#aa0000]R[/color]éinitialiser", "[color=#ffffff]Réinitialiser[/color]", _on_reset_pressed)
+	_setup_menu_item(stats_button, "S[color=#aa0000]t[/color]ats", "[color=#ffffff]Stats[/color]", _open_stats)
 	help_close_button.pressed.connect(_close_help)
 	mute_button.pressed.connect(_on_mute_pressed)
 	_build_help_topics()
@@ -707,16 +719,28 @@ func _hide_event_popup() -> void:
 	t.tween_callback(func() -> void: event_popup.visible = false)
 
 
-func _open_help() -> void:
+# Entrée de menu dédiée "Stats" : ouvre l'Aide directement sur ce thème.
+func _open_stats() -> void:
+	_open_help("stats")
+
+
+# preferred_id : ouvre directement sur ce thème s'il est visible (ex. "stats" depuis
+# son entrée de menu dédiée) ; sinon (ou si "") on retombe sur le 1er thème débloqué.
+func _open_help(preferred_id: String = "") -> void:
 	# On n'affiche que les thèmes des mécaniques débloquées (pas de spoiler).
 	var first := -1
+	var preferred := -1
 	for i in help_topics.size():
 		var gate: String = help_topics[i].gate
 		var vis: bool = gate == "" or bool(unlocked.get(gate, false))
 		help_buttons[i].visible = vis
 		if vis and first < 0:
 			first = i
-	if first >= 0:
+		if vis and preferred_id != "" and help_topics[i].id == preferred_id:
+			preferred = i
+	if preferred >= 0:
+		_show_help_topic(preferred)
+	elif first >= 0:
 		_show_help_topic(first)
 	help_overlay.visible = true
 	help_overlay.modulate.a = 0.0
@@ -725,7 +749,8 @@ func _open_help() -> void:
 
 func _show_help_topic(i: int) -> void:
 	var t: Dictionary = help_topics[i]
-	help_text.text = "[color=#000080]%s[/color]\n\n%s" % [t.title, t.text]
+	var body: String = _build_stats_text() if t.id == "stats" else t.text
+	help_text.text = "[color=#000080]%s[/color]\n\n%s" % [t.title, body]
 	# Le thème actif passe en bloc bleu / texte blanc (sélection façon DOS).
 	for j in help_buttons.size():
 		var b := help_buttons[j]
@@ -739,6 +764,18 @@ func _show_help_topic(i: int) -> void:
 			b.remove_theme_stylebox_override("hover")
 			b.remove_theme_color_override("font_color")
 			b.remove_theme_color_override("font_hover_color")
+
+
+# Compose le texte de l'onglet "Stats" (calculé à chaque ouverture, pas mis en cache :
+# ça doit refléter l'état courant de la partie).
+func _build_stats_text() -> String:
+	var mins := int(play_time / 60.0)
+	var hours := mins / 60
+	var time_str := "%dh%02d" % [hours, mins % 60] if hours > 0 else "%d min" % mins
+	return "Temps de jeu : %s\nFragments d'IA cumulés : %d\nCompilations (prestiges) : %d\nBoss vaincus : %d\n\nMeilleur combo : x%d\nCommandes tapées : %d (dont %d rares)\nMeilleure run : %s o" % [
+		time_str, total_fragments_earned, prestige_count, boss_level,
+		best_combo, total_commands_typed, total_rare_typed, _fmt_short(best_run_earned),
+	]
 
 
 func _close_help() -> void:
@@ -1066,6 +1103,7 @@ func event_multiplier() -> float:
 func _earn(amount: float) -> void:
 	data += amount
 	run_earned += amount
+	best_run_earned = maxf(best_run_earned, run_earned)
 
 
 # Point de passage unique pour tout gain de Fragments (suit l'objectif de fin).
@@ -1253,6 +1291,10 @@ func _complete_command() -> void:
 		combo += 1
 	_earn(bonus)
 	combo_timer = 0.0
+	best_combo = maxi(best_combo, combo)
+	total_commands_typed += 1
+	if rare:
+		total_rare_typed += 1
 
 	_term_log(current_command, int(bonus), rare)
 
@@ -2207,6 +2249,10 @@ func save_game() -> void:
 		"has_won": has_won,
 		"prestige_count": prestige_count,
 		"play_time": play_time,
+		"best_combo": best_combo,
+		"total_commands_typed": total_commands_typed,
+		"total_rare_typed": total_rare_typed,
+		"best_run_earned": best_run_earned,
 		"unlocked": unlocked,
 		"unlocks_owned": _owned_unlock_ids(),
 		"muted": muted,
@@ -2243,6 +2289,10 @@ func load_game() -> void:
 	has_won = bool(payload.get("has_won", false))
 	prestige_count = int(payload.get("prestige_count", 0))
 	play_time = float(payload.get("play_time", 0.0))
+	best_combo = int(payload.get("best_combo", 0))
+	total_commands_typed = int(payload.get("total_commands_typed", 0))
+	total_rare_typed = int(payload.get("total_rare_typed", 0))
+	best_run_earned = float(payload.get("best_run_earned", 0.0))
 	muted = bool(payload.get("muted", false))
 	sfx_volume = float(payload.get("sfx_volume", 0.8))
 
@@ -2317,6 +2367,10 @@ func _do_reset() -> void:
 	has_won = false
 	prestige_count = 0
 	play_time = 0.0
+	best_combo = 0
+	total_commands_typed = 0
+	total_rare_typed = 0
+	best_run_earned = 0.0
 	for k in unlocked:
 		unlocked[k] = false
 	for u in unlocks:

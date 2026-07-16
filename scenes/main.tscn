@@ -260,6 +260,19 @@ fit_content = true
 scroll_active = false
 autowrap_mode = 0
 
+[node name="StatsButton" type="RichTextLabel" parent="HUD/Root/MenuBar/H"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_default_cursor_shape = 2
+theme_override_font_sizes/normal_font_size = 17
+bbcode_enabled = true
+text = "S[color=#aa0000]t[/color]ats"
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
+
 [node name="TopBar" type="HBoxContainer" parent="HUD/Root"]
 layout_mode = 2
 theme_override_constants/separation = 12
@@ -922,7 +935,6 @@ text = "Continuer (mode libre)"
 
 [node name="HelpOverlay" type="Control" parent="."]
 unique_name_in_owner = true
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
