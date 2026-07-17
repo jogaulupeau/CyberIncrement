@@ -142,7 +142,6 @@ const OVERCLOCK_MULT := 3.0            # production ×3 pendant le daemon OVERCL
 # Pare-feux (boss de frappe) : apparaissent périodiquement, à briser au clavier.
 const FIREWALL_SPAWN_MIN := 100.0     # intervalle aléatoire entre deux firewalls
 const FIREWALL_SPAWN_MAX := 160.0
-const FIREWALL_TIME := 30.0           # temps pour le briser
 const FIREWALL_BASE_HP := 80.0       # PV du 1er firewall (dégâts = longueur des commandes)
 const FIREWALL_HP_GROWTH := 0.5       # +50% de PV par firewall vaincu
 const BOSS_FAIL_TRACE := 60.0         # boss non vaincu : traçage +60% (peut déclencher l'intrusion)
