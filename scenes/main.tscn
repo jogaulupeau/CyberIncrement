@@ -1100,6 +1100,72 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Confirmer"
 
+[node name="RewardOverlay" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Veil" type="ColorRect" parent="RewardOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0.667, 0.9)
+
+[node name="Center" type="CenterContainer" parent="RewardOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VB" type="VBoxContainer" parent="RewardOverlay/Center"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="RewardTitle" type="Label" parent="RewardOverlay/Center/VB"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "CHOISIS TON BUTIN"
+horizontal_alignment = 1
+
+[node name="Box" type="PanelContainer" parent="RewardOverlay/Center/VB"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("modal_box")
+
+[node name="Cards" type="HBoxContainer" parent="RewardOverlay/Center/VB/Box"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="RewardCard0" type="Button" parent="RewardOverlay/Center/VB/Box/Cards"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 150)
+layout_mode = 2
+text = "[1]"
+
+[node name="RewardCard1" type="Button" parent="RewardOverlay/Center/VB/Box/Cards"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 150)
+layout_mode = 2
+text = "[2]"
+
+[node name="RewardCard2" type="Button" parent="RewardOverlay/Center/VB/Box/Cards"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 150)
+layout_mode = 2
+text = "[3]"
+
 [node name="EventPopup" type="Control" parent="."]
 unique_name_in_owner = true
 visible = false

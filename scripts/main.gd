@@ -140,15 +140,31 @@ const GLITCH_CHARS := "#%&@?$*"        # symboles de brouillage pour l'instabili
 const OVERCLOCK_MULT := 3.0            # production ×3 pendant le daemon OVERCLOCK
 
 # Pare-feux (boss de frappe) : apparaissent périodiquement, à briser au clavier.
-const FIREWALL_SPAWN_MIN := 120.0     # intervalle aléatoire entre deux firewalls
-const FIREWALL_SPAWN_MAX := 180.0
-const FIREWALL_TIME := 28.0           # temps pour le briser
-const FIREWALL_BASE_HP := 120.0       # PV du 1er firewall (dégâts = longueur des commandes)
+const FIREWALL_SPAWN_MIN := 100.0     # intervalle aléatoire entre deux firewalls
+const FIREWALL_SPAWN_MAX := 160.0
+const FIREWALL_TIME := 30.0           # temps pour le briser
+const FIREWALL_BASE_HP := 80.0       # PV du 1er firewall (dégâts = longueur des commandes)
 const FIREWALL_HP_GROWTH := 0.5       # +50% de PV par firewall vaincu
 const BOSS_FAIL_TRACE := 60.0         # boss non vaincu : traçage +60% (peut déclencher l'intrusion)
 const FIREWALL_REWARD_SECONDS := 90.0 # butin de base = X secondes de production
 const FIREWALL_REWARD_LEVEL_STEP := 0.5 # +50% de butin par firewall déjà vaincu
 const FIREWALL_COMBO_STEP := 0.05     # +5% de butin par palier de combo au moment de la victoire
+# Butin de boss : le joueur choisit UNE récompense parmi 3 tirées (pondérées) dans un large pool.
+# Chaque récompense a une RARETÉ : commune (fréquente), rare, légendaire (la meilleure, la plus rare).
+# Le tirage est pondéré par ces poids -> plus une carte est puissante, plus elle est rare.
+const REWARD_RARITY_WEIGHT := {"commune": 100, "rare": 12, "legendaire": 3}
+# Couleur de FOND de la carte selon la rareté (lisibilité : texte clair sur rare/légendaire).
+const RARITY_BG := {
+	"commune": Color(0.70, 0.70, 0.70),
+	"rare": Color(0.10, 0.45, 0.85),
+	"legendaire": Color(0.90, 0.68, 0.12),
+}
+const RARITY_FG := {
+	"commune": Color(0.10, 0.10, 0.10),
+	"rare": Color(1, 1, 1),
+	"legendaire": Color(0.12, 0.06, 0),
+}
+const RARITY_LABEL := {"commune": "COMMUN", "rare": "RARE", "legendaire": "LÉGENDAIRE"}
 const BOSS_TYPO_HEAL := 8.0           # PV rendus par faute de frappe (Analyste SOC)
 const BOSS_THROTTLE_DMG := 12.0       # dégâts FIXES par commande (AntiDDOS : le volume compte)
 
@@ -172,6 +188,11 @@ var op_cooldown_remaining: float = 0.0
 var trace: float = 0.0                 # jauge de traçage 0..TRACE_MAX
 var malus_remaining: float = 0.0       # temps restant du malus "TRACÉ"
 var zeroday_buff_remaining: float = 0.0 # temps restant du buff faille
+# Buffs "récompense de boss" à intensité/durée variables (selon la rareté de la carte choisie).
+var click_buff_remaining: float = 0.0  # temps restant du buff FRAPPE (clic ×N)
+var click_buff_mult: float = 1.0       # multiplicateur de clic pendant le buff FRAPPE
+var rwd_prod_remaining: float = 0.0    # temps restant du buff de production (FAILLE/SURRÉGIME/ROOTKIT)
+var rwd_prod_mult: float = 1.0         # multiplicateur de production pendant ce buff
 var zeroday_window_remaining: float = 0.0 # temps restant pour cliquer une faille visible
 var zeroday_spawn_timer: float = 0.0   # compte à rebours avant la prochaine faille
 var _pop_tween: Tween = null           # animation de "pop" en cours sur le compteur
@@ -218,6 +239,8 @@ const SFX_FILES := {
 	"unlock": "res://assets/audio/unlock.wav",
 	"boss": "res://assets/audio/boss.wav",
 	"victory": "res://assets/audio/victory.wav",
+	"reward": "res://assets/audio/reward.wav",
+	"rare_reveal": "res://assets/audio/rare_reveal.wav",
 	"glitch": "res://assets/audio/glitch.wav",
 	"overload": "res://assets/audio/overload.wav",
 	"stable": "res://assets/audio/stable.wav",
@@ -362,6 +385,9 @@ const NET_MAX_ZOOM := 2.5
 @onready var confirm_msg: RichTextLabel = %ConfirmMsg
 @onready var confirm_ok: Button = %ConfirmOK
 @onready var confirm_cancel: Button = %ConfirmCancel
+@onready var reward_overlay: Control = %RewardOverlay
+@onready var reward_title: Label = %RewardTitle
+@onready var reward_cards: Array[Button] = [%RewardCard0, %RewardCard1, %RewardCard2]
 @onready var event_popup: Control = %EventPopup
 @onready var event_popup_bar: PanelContainer = %EventPopupBar
 @onready var event_popup_title: Label = %EventPopupTitle
@@ -442,6 +468,8 @@ func _ready() -> void:
 	prestige_button.pressed.connect(_on_prestige_pressed)
 	confirm_ok.pressed.connect(_on_confirm_ok)
 	confirm_cancel.pressed.connect(_on_confirm_cancel)
+	for i in reward_cards.size():
+		reward_cards[i].pressed.connect(_pick_reward.bind(i))
 	op_button.pressed.connect(_on_operation_pressed)
 	zeroday_button.pressed.connect(_on_zeroday_pressed)
 	# Pas de focus clavier sur les boutons désactivables dynamiquement : sinon le
@@ -655,6 +683,8 @@ func _setup_menu_item(item: RichTextLabel, base_bb: String, hover_bb: String, ac
 
 var _confirm_action := Callable()       # action à exécuter si l'utilisateur confirme
 var event_popup_active := false         # true pendant la popup d'alerte (boss/événement) : jeu en pause
+var reward_choice_active := false       # true pendant la modale de choix de butin de boss : jeu en pause
+var _reward_options: Array = []         # les 3 récompenses tirées, en attente du choix du joueur
 
 # Affiche le modal. title/message (message en BBCode), texte du bouton OK.
 # danger=true : action destructive -> focus par défaut sur Annuler, OK en rouge.
@@ -998,8 +1028,8 @@ func _setup_autosave() -> void:
 
 
 func _process(delta: float) -> void:
-	if event_popup_active:
-		return                              # jeu en pause : lecture forcée de la popup d'alerte
+	if event_popup_active or reward_choice_active:
+		return                              # jeu en pause : popup d'alerte ou choix de butin
 	play_time += delta
 	_earn(production_per_second() * delta)
 	# Auto-clic : chaque "clic auto" vaut autant qu'un clic manuel.
@@ -1069,6 +1099,10 @@ func _update_timers(delta: float) -> void:
 		malus_remaining = maxf(0.0, malus_remaining - delta)
 	if zeroday_buff_remaining > 0.0:
 		zeroday_buff_remaining = maxf(0.0, zeroday_buff_remaining - delta)
+	if click_buff_remaining > 0.0:
+		click_buff_remaining = maxf(0.0, click_buff_remaining - delta)
+	if rwd_prod_remaining > 0.0:
+		rwd_prod_remaining = maxf(0.0, rwd_prod_remaining - delta)
 
 	# Gestion des failles zero-day.
 	if zeroday_window_remaining > 0.0:
@@ -1091,6 +1125,8 @@ func event_multiplier() -> float:
 	var m: float = 1.0
 	if zeroday_buff_remaining > 0.0:
 		m *= ZERODAY_MULT
+	if rwd_prod_remaining > 0.0:
+		m *= rwd_prod_mult
 	if malus_remaining > 0.0:
 		m *= MALUS_MULT
 	if _daemon_active("overclock"):
@@ -1170,7 +1206,12 @@ func prestige_multiplier() -> float:
 
 # Valeur d'un clic (manuel ou auto), tous bonus inclus.
 func click_value() -> float:
-	return per_click * prestige_multiplier() * item_click_mult() * network_click_mult()
+	return per_click * prestige_multiplier() * item_click_mult() * network_click_mult() * reward_click_mult()
+
+
+# Multiplicateur temporaire de clic (récompense de boss FRAPPE/DÉLUGE).
+func reward_click_mult() -> float:
+	return click_buff_mult if click_buff_remaining > 0.0 else 1.0
 
 
 func production_per_second() -> float:
@@ -1219,6 +1260,20 @@ func _input(event: InputEvent) -> void:
 		var w := get_window()
 		w.mode = Window.MODE_WINDOWED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
 		get_viewport().set_input_as_handled()
+		return
+	# Modale de choix de butin : 1/2/3 sélectionnent directement une carte. On ne consomme
+	# QUE ces touches : Entrée/Tab/flèches restent au système de focus (navigation des cartes),
+	# et le mini-jeu de frappe plus bas reste gelé (return) tant que la modale est ouverte.
+	if reward_choice_active:
+		if event.keycode == KEY_1 or event.keycode == KEY_KP_1:
+			_pick_reward(0)
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_2 or event.keycode == KEY_KP_2:
+			_pick_reward(1)
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_3 or event.keycode == KEY_KP_3:
+			_pick_reward(2)
+			get_viewport().set_input_as_handled()
 		return
 	# Raccourcis "touches de fonction" façon DOS (annoncés dans la barre de statut).
 	if event_popup_active:
@@ -1770,20 +1825,153 @@ func _defeat_boss() -> void:
 	boss_level += 1
 	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
 
-	# Butin = fraction de ta production ACTUELLE (donc dépend de TOUT : générateurs,
+	# Célébration immédiate de la casse du firewall (le butin, lui, se choisit ensuite).
+	_flash(FX_GAIN, 0.5)
+	_spawn_floating_text("FIREWALL BRISÉ !", _center_of(terminal), FX_GAIN)
+	_burst_particles(_center_of(terminal))
+	_play_sfx("victory")
+
+	# Butin de base = fraction de ta production ACTUELLE (donc dépend de TOUT : générateurs,
 	# prestige, items, buffs actifs) × difficulté du firewall × maîtrise au clavier (combo).
 	var level_mult := 1.0 + boss_level * FIREWALL_REWARD_LEVEL_STEP
 	var combo_mult := 1.0 + combo * FIREWALL_COMBO_STEP
-	var reward := maxf(production_per_second() * FIREWALL_REWARD_SECONDS, click_value() * 150.0) * level_mult * combo_mult
-	var frag_reward := 1 + int(boss_level / 2)   # les firewalls plus durs donnent plus de Fragments
-	_earn(reward)
-	_gain_fragments(frag_reward)
+	var base_octets := maxf(production_per_second() * FIREWALL_REWARD_SECONDS, click_value() * 150.0) * level_mult * combo_mult
+	var base_frags := 1 + int(boss_level / 2)   # les firewalls plus durs donnent plus de Fragments
 
-	_flash(FX_GAIN, 0.5)
-	_spawn_floating_text("FIREWALL BRISÉ !  +%d o  +%d Frag" % [int(reward), frag_reward], _center_of(terminal), FX_GAIN)
+	# On tire 3 récompenses distinctes (tirage PONDÉRÉ par rareté), puis le joueur choisit.
+	var picks := _draw_rewards(_boss_reward_pool(base_octets, base_frags), 3)
+	_show_reward_choice(picks)
+
+
+# Construit le pool complet des récompenses possibles, dimensionnées sur le butin de ce combat.
+# Chaque entrée : rarity (commune/rare/legendaire), title (nom court), detail (effet chiffré),
+# kind (type d'effet appliqué) + paramètres (value / mult / dur selon le kind).
+func _boss_reward_pool(octets: float, frags: int) -> Array:
+	return [
+		# --- COMMUNES ---------------------------------------------------------
+		{"rarity": "commune", "title": "BUTIN",  "kind": "octets", "value": octets * 1.5,
+			"detail": "+%s o" % _fmt_short(octets * 1.5)},
+		{"rarity": "commune", "title": "CACHE",  "kind": "frags", "value": float(maxi(2, frags * 2)),
+			"detail": "+%d Frag" % maxi(2, frags * 2)},
+		{"rarity": "commune", "title": "FAILLE", "kind": "prod", "mult": 3.0, "dur": 30.0,
+			"detail": "prod ×3 / 30s"},
+		{"rarity": "commune", "title": "PURGE",  "kind": "trace", "value": 40.0,
+			"detail": "traçage −40"},
+		{"rarity": "commune", "title": "FRAPPE", "kind": "clic", "mult": 4.0, "dur": 20.0,
+			"detail": "clic ×4 / 20s"},
+		# --- RARES ------------------------------------------------------------
+		{"rarity": "rare", "title": "JACKPOT", "kind": "octets", "value": octets * 4.0,
+			"detail": "+%s o" % _fmt_short(octets * 4.0)},
+		{"rarity": "rare", "title": "COFFRE",  "kind": "frags", "value": float(maxi(3, frags * 5)),
+			"detail": "+%d Frag" % maxi(3, frags * 5)},
+		{"rarity": "rare", "title": "SURRÉGIME", "kind": "prod", "mult": 3.0, "dur": 90.0,
+			"detail": "prod ×3 / 90s"},
+		{"rarity": "rare", "title": "BLANCHIMENT", "kind": "trace", "value": TRACE_MAX,
+			"detail": "traçage → 0"},
+		# --- LÉGENDAIRES ------------------------------------------------------
+		{"rarity": "legendaire", "title": "MAGOT",  "kind": "octets", "value": octets * 10.0,
+			"detail": "+%s o" % _fmt_short(octets * 10.0)},
+		{"rarity": "legendaire", "title": "NOYAU",  "kind": "frags", "value": float(maxi(6, frags * 12)),
+			"detail": "+%d Frag" % maxi(6, frags * 12)},
+		{"rarity": "legendaire", "title": "ROOTKIT", "kind": "prod", "mult": 5.0, "dur": 60.0,
+			"detail": "prod ×5 / 60s"},
+		{"rarity": "legendaire", "title": "DÉLUGE",  "kind": "clic", "mult": 10.0, "dur": 30.0,
+			"detail": "clic ×10 / 30s"},
+	]
+
+
+# Tire n récompenses DISTINCTES dans le pool, chaque tirage pondéré par la rareté
+# (une commune sort ~8× plus souvent qu'une rare, ~33× plus qu'une légendaire).
+func _draw_rewards(pool: Array, n: int) -> Array:
+	var remaining := pool.duplicate()
+	var picked: Array = []
+	for _i in n:
+		if remaining.is_empty():
+			break
+		var total := 0.0
+		for r in remaining:
+			total += float(REWARD_RARITY_WEIGHT.get(r.rarity, 1))
+		var roll := randf() * total
+		var acc := 0.0
+		var chosen := 0
+		for j in remaining.size():
+			acc += float(REWARD_RARITY_WEIGHT.get(remaining[j].rarity, 1))
+			if roll <= acc:
+				chosen = j
+				break
+		picked.append(remaining[chosen])
+		remaining.remove_at(chosen)
+	return picked
+
+
+# Ouvre la modale : remplit/colore les 3 cartes, met le jeu en pause (sans minuteur), et
+# joue le son de "reveal" si au moins une carte rare/légendaire est tombée.
+func _show_reward_choice(options: Array) -> void:
+	_reward_options = options
+	reward_choice_active = true
+	reward_title.text = "FIREWALL BRISÉ (Nv %d) — CHOISIS TON BUTIN" % boss_level
+	var has_rare := false
+	for i in options.size():
+		var opt: Dictionary = options[i]
+		var rarity: String = opt.rarity
+		if rarity != "commune":
+			has_rare = true
+		reward_cards[i].text = "[%d]  %s\n\n%s\n\n%s" % [i + 1, RARITY_LABEL[rarity], opt.title, opt.detail]
+		_style_reward_card(reward_cards[i], RARITY_BG[rarity], RARITY_FG[rarity])
+	reward_overlay.visible = true
+	reward_overlay.modulate.a = 0.0
+	create_tween().tween_property(reward_overlay, "modulate:a", 1.0, 0.12)
+	reward_cards[0].grab_focus()
+	if has_rare:
+		_play_sfx("rare_reveal")
+
+
+# Applique les styles DOS colorés d'une carte selon sa rareté (fond + texte).
+func _style_reward_card(card: Button, bg: Color, fg: Color) -> void:
+	var normal := _make_flat(bg, Color(0, 0, 0), 2, Vector2(4, 4))
+	var hover := _make_flat(bg.lightened(0.18), Color(0, 0, 0), 2, Vector2(4, 4))
+	var pressed := _make_flat(bg.darkened(0.18), Color(0, 0, 0), 2, Vector2(1, 1))
+	for s in [normal, hover, pressed]:
+		s.content_margin_left = 12.0
+		s.content_margin_right = 12.0
+		s.content_margin_top = 10.0
+		s.content_margin_bottom = 10.0
+	card.add_theme_stylebox_override("normal", normal)
+	card.add_theme_stylebox_override("hover", hover)
+	card.add_theme_stylebox_override("focus", hover)
+	card.add_theme_stylebox_override("pressed", pressed)
+	for c in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
+		card.add_theme_color_override(c, fg)
+
+
+# Le joueur choisit la carte idx : applique l'effet, joue le son gratifiant, ferme la modale.
+func _pick_reward(idx: int) -> void:
+	if not reward_choice_active or idx < 0 or idx >= _reward_options.size():
+		return
+	var opt: Dictionary = _reward_options[idx]
+	reward_choice_active = false
+	_reward_options = []
+	reward_overlay.visible = false
+	_apply_reward(opt)
+	_play_sfx("reward")
+	_flash(FX_GAIN, 0.35)
+	_spawn_floating_text("%s  %s" % [opt.title, opt.detail], _center_of(terminal), FX_SPECIAL)
 	_burst_particles(_center_of(terminal))
-	_show_toast("FIREWALL BRISÉ  (Nv %d)" % boss_level, "Butin : +%d o     •     +%d Fragment(s)" % [int(reward), frag_reward], TOAST_WIN, 5.0)
-	_set_status("Firewall Nv %d brisé ! +%d o, +%d Fragment(s)." % [boss_level, int(reward), frag_reward])
+	_show_toast("BUTIN %s — %s" % [RARITY_LABEL[opt.rarity], opt.title], opt.detail, TOAST_WIN, 5.0)
+	_set_status("Butin de boss : %s (%s)." % [opt.title, opt.detail])
+
+
+func _apply_reward(opt: Dictionary) -> void:
+	match opt.kind:
+		"octets": _earn(opt.value)
+		"frags":  _gain_fragments(int(opt.value))
+		"prod":
+			rwd_prod_mult = opt.mult
+			rwd_prod_remaining = opt.dur
+		"clic":
+			click_buff_mult = opt.mult
+			click_buff_remaining = opt.dur
+		"trace":  trace = maxf(0.0, trace - opt.value)
 
 
 func _fail_boss() -> void:
@@ -2363,6 +2551,8 @@ func _do_reset() -> void:
 	op_cooldown_remaining = 0.0
 	malus_remaining = 0.0
 	zeroday_buff_remaining = 0.0
+	click_buff_remaining = 0.0
+	rwd_prod_remaining = 0.0
 	zeroday_window_remaining = 0.0
 	zeroday_button.visible = false
 	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
@@ -2528,6 +2718,14 @@ func _update_display() -> void:
 	var status_txt := ""
 	if zeroday_buff_remaining > 0.0:
 		status_txt += "FAILLE ACTIVE : prod x%d (%d s)" % [int(ZERODAY_MULT), int(ceil(zeroday_buff_remaining))]
+	if rwd_prod_remaining > 0.0:
+		if status_txt != "":
+			status_txt += "     "
+		status_txt += "SURRÉGIME : prod x%d (%d s)" % [int(rwd_prod_mult), int(ceil(rwd_prod_remaining))]
+	if click_buff_remaining > 0.0:
+		if status_txt != "":
+			status_txt += "     "
+		status_txt += "FRAPPE : clic x%d (%d s)" % [int(click_buff_mult), int(ceil(click_buff_remaining))]
 	if malus_remaining > 0.0:
 		if status_txt != "":
 			status_txt += "     "

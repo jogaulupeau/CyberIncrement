@@ -91,6 +91,29 @@ func _initialize() -> void:
 	_save(dir + "boss.wav", _mix(_tone(90, 80, 0.6, "saw", 0.28, 0.02, 0.15), _tone(45, 45, 0.6, "sine", 0.25)))
 	_save(dir + "victory.wav", _cat(_cat(_cat(_tone(523, 523, 0.12, "sine", 0.28), _tone(659, 659, 0.12, "sine", 0.28)), _tone(784, 784, 0.12, "sine", 0.28)), _tone(1046, 1050, 0.35, "sine", 0.3, 0.01, 0.15)))
 
+	# Récompense choisie (butin de boss) : arpège ascendant brillant + scintillement aigu
+	# par-dessus toute la durée -> "ding" satisfaisant de collecte, distinct de victory.wav.
+	var reward_body: PackedFloat32Array = _cat(_cat(_cat(
+		_tone(784, 784, 0.06, "sine", 0.26),      # G5
+		_tone(1046, 1046, 0.06, "sine", 0.26)),   # C6
+		_tone(1318, 1318, 0.06, "sine", 0.26)),   # E6
+		_tone(1568, 1580, 0.42, "sine", 0.32, 0.005, 0.24))   # G6 tenue
+	var reward_shimmer: PackedFloat32Array = _tone(2093, 3136, 0.60, "sine", 0.09, 0.01, 0.3)  # scintillement C7->G7
+	_save(dir + "reward.wav", _mix(reward_body, reward_shimmer))
+
+	# Révélation d'une récompense RARE dans le tirage : "jackpot" scintillant plus riche et
+	# plus aigu que reward.wav (montée rapide + balayage haut + note tenue). Joué à l'ouverture
+	# de la modale quand au moins une carte rare/légendaire est présente.
+	var rare_run: PackedFloat32Array = _cat(_cat(_cat(
+		_tone(1046, 1046, 0.07, "sine", 0.24),    # C6
+		_tone(1318, 1318, 0.07, "sine", 0.24)),   # E6
+		_tone(1568, 1568, 0.07, "sine", 0.24)),   # G6
+		_tone(2093, 2100, 0.48, "sine", 0.30, 0.005, 0.3))    # C7 tenue
+	var rare_spark: PackedFloat32Array = _mix(
+		_tone(3136, 4186, 0.78, "sine", 0.07, 0.02, 0.4),     # balayage aigu G7->C8
+		_tone(2637, 2637, 0.78, "sine", 0.05, 0.35, 0.4))     # scintillement E7 soutenu
+	_save(dir + "rare_reveal.wav", _mix(rare_run, rare_spark))
+
 	# Événements aléatoires.
 	var g := PackedFloat32Array()
 	for k in 8:
