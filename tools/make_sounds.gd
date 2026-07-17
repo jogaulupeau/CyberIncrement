@@ -114,6 +114,16 @@ func _initialize() -> void:
 		_tone(2637, 2637, 0.78, "sine", 0.05, 0.35, 0.4))     # scintillement E7 soutenu
 	_save(dir + "rare_reveal.wav", _mix(rare_run, rare_spark))
 
+	# Échec contre un boss (firewall non brisé) : deux notes descendantes façon alarme, puis
+	# un "power-down" grave (balayage saw vers le bas mixé à un souffle grave). Sombre, sans appel.
+	var fail_beeps: PackedFloat32Array = _cat(
+		_tone(330, 330, 0.13, "square", 0.30),    # note 1
+		_tone(247, 247, 0.13, "square", 0.30))    # note 2 (plus grave)
+	var fail_down: PackedFloat32Array = _mix(
+		_tone(300, 70, 0.55, "saw", 0.28, 0.01, 0.14),    # chute de hauteur
+		_tone(95, 55, 0.55, "sine", 0.18, 0.01, 0.14))    # souffle grave
+	_save(dir + "boss_fail.wav", _cat(fail_beeps, fail_down))
+
 	# Événements aléatoires.
 	var g := PackedFloat32Array()
 	for k in 8:

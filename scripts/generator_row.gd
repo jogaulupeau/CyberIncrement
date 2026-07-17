@@ -1,8 +1,8 @@
 extends PanelContainer
 ## Une LIGNE d'interface réutilisable, pour UN générateur.
 ##
-## Rôle : afficher (nom, quantité, prod, coût) et proposer un bouton "Acheter".
-## Elle ne connaît PAS les règles du jeu (combien de Données on a, etc.).
+## Rôle : afficher (nom, quantité, prod, coût) en COLONNES alignées et proposer un
+## bouton "Acheter". Elle ne connaît PAS les règles du jeu (combien de Données on a, etc.).
 ## Quand on clique "Acheter", elle se contente d'ÉMETTRE UN SIGNAL ;
 ## c'est main.gd (le cerveau) qui décidera si l'achat est possible.
 ## Ce découpage "affichage ≠ logique" est une bonne habitude d'architecture.
@@ -16,7 +16,9 @@ signal buy_requested(index: int)
 var index: int = -1   # position de ce générateur dans la liste de main.gd
 
 @onready var icon_rect: TextureRect = %IconRect
-@onready var info_label: Label = %InfoLabel
+@onready var name_label: Label = %NameLabel
+@onready var mult_label: Label = %MultLabel
+@onready var bonus_label: Label = %BonusLabel
 @onready var buy_button: Button = %BuyButton
 
 
@@ -39,8 +41,11 @@ func _on_buy_pressed() -> void:
 	buy_requested.emit(index)   # "quelqu'un veut acheter le générateur n°index"
 
 
-# main.gd appelle ceci pour rafraîchir l'affichage de la ligne.
-func refresh(gen_name: String, count: int, production: float, cost: float, affordable: bool) -> void:
-	info_label.text = "%s  (x%d)   —   +%.0f o/s" % [gen_name, count, production]
-	buy_button.text = "Acheter — %d o" % cost
+# main.gd prépare les chaînes (déjà formatées) ; la ligne les répartit dans ses colonnes.
+# Le prix est intégré au bouton d'achat (plus lisible qu'une colonne "coût" isolée).
+func refresh(gen_name: String, count: int, bonus_str: String, cost_str: String, affordable: bool) -> void:
+	name_label.text = gen_name
+	mult_label.text = "x%d" % count
+	bonus_label.text = "+%s o/s" % bonus_str
+	buy_button.text = "Acheter — %s o" % cost_str
 	buy_button.disabled = not affordable

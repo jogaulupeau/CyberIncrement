@@ -38,13 +38,14 @@ text = "Item  (Nv 0/0)"
 [node name="DescLabel" type="Label" parent="Margin/HBox/Info"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.5, 0.7, 0.68, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.13, 0.32, 0.3, 1)
+theme_override_font_sizes/font_size = 15
 autowrap_mode = 2
 text = "Description de l'effet"
 
 [node name="BuyButton" type="Button" parent="Margin/HBox"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
 layout_mode = 2
 size_flags_vertical = 4
 text = "Améliorer"

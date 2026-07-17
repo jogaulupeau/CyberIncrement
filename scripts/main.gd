@@ -240,6 +240,7 @@ const SFX_FILES := {
 	"victory": "res://assets/audio/victory.wav",
 	"reward": "res://assets/audio/reward.wav",
 	"rare_reveal": "res://assets/audio/rare_reveal.wav",
+	"boss_fail": "res://assets/audio/boss_fail.wav",
 	"glitch": "res://assets/audio/glitch.wav",
 	"overload": "res://assets/audio/overload.wav",
 	"stable": "res://assets/audio/stable.wav",
@@ -400,7 +401,8 @@ const NET_MAX_ZOOM := 2.5
 @onready var ops_title: Label = %OpsTitle
 @onready var ops_desc: Label = %OpsDesc
 @onready var daemons_panel: PanelContainer = %DaemonsPanel
-@onready var cooldown_bar: ProgressBar = %CooldownBar
+@onready var op_fill: ColorRect = %OpFill
+@onready var op_label: Label = %OpLabel
 @onready var trace_label: Label = %TraceLabel
 @onready var trace_bar: Panel = %TraceBar
 @onready var trace_ticks: HBoxContainer = %Ticks
@@ -476,11 +478,10 @@ func _ready() -> void:
 	prestige_button.focus_mode = Control.FOCUS_NONE
 	op_button.focus_mode = Control.FOCUS_NONE
 
-	cooldown_bar.max_value = OP_COOLDOWN
 	_build_trace_ticks()
 	logo_icon.texture = load("res://assets/icons/ai-logo.svg")
 	fragment_icon.texture = load("res://assets/icons/fragment.svg")
-	zeroday_button.visible = false
+	_set_zeroday_shown(false)
 	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
 	boss_spawn_timer = randf_range(FIREWALL_SPAWN_MIN, FIREWALL_SPAWN_MAX)
 	event_spawn_timer = randf_range(EVENT_SPAWN_MIN, EVENT_SPAWN_MAX)
@@ -554,7 +555,6 @@ func _apply_gating() -> void:
 	daemons_panel.visible = unlocked.daemons
 	var ops: bool = unlocked.operations
 	op_button.visible = ops
-	cooldown_bar.visible = ops
 	ops_title.visible = ops
 	ops_desc.visible = ops
 
@@ -1109,7 +1109,7 @@ func _update_timers(delta: float) -> void:
 		zeroday_window_remaining -= delta
 		if zeroday_window_remaining <= 0.0:
 			zeroday_window_remaining = 0.0
-			zeroday_button.visible = false
+			_set_zeroday_shown(false)
 			zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
 			_set_status("Faille zero-day manquée.")
 	else:
@@ -1980,6 +1980,7 @@ func _fail_boss() -> void:
 	# Échec = traçage +60% (peut déclencher directement une intrusion si déjà haut).
 	trace = minf(TRACE_MAX, trace + BOSS_FAIL_TRACE)
 	_flash(FX_ALERT, 0.5)
+	_play_sfx("boss_fail")
 	_show_toast("FIREWALL NON BRISÉ", "Traçage +%d%%" % int(BOSS_FAIL_TRACE), TOAST_ALERT, 5.0)
 	_set_status("Firewall non brisé ! Traçage +%d%%." % int(BOSS_FAIL_TRACE))
 	if trace >= TRACE_MAX:
@@ -2347,9 +2348,17 @@ func _fmt_short(v: float) -> String:
 
 # --- Failles zero-day --------------------------------------------------------
 
+# Affiche/masque le bouton de faille SANS le retirer de la mise en page : il garde
+# toujours sa place (transparent + désactivé quand aucune faille n'est active), pour que
+# l'apparition d'une faille ne fasse plus rétrécir le terminal en plein combat de boss.
+func _set_zeroday_shown(shown: bool) -> void:
+	zeroday_button.modulate.a = 1.0 if shown else 0.0
+	zeroday_button.disabled = not shown
+
+
 func _spawn_zeroday() -> void:
 	zeroday_window_remaining = ZERODAY_WINDOW
-	zeroday_button.visible = true
+	_set_zeroday_shown(true)
 	_set_status("Faille zero-day détectée ! Exploite-la vite.")
 
 
@@ -2357,7 +2366,7 @@ func _on_zeroday_pressed() -> void:
 	if zeroday_window_remaining <= 0.0:
 		return
 	zeroday_window_remaining = 0.0
-	zeroday_button.visible = false
+	_set_zeroday_shown(false)
 	zeroday_buff_remaining = ZERODAY_BUFF_DURATION
 	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
 	_flash(FX_SPECIAL, 0.4)   # flash ambre : boost faille
@@ -2553,7 +2562,7 @@ func _do_reset() -> void:
 	click_buff_remaining = 0.0
 	rwd_prod_remaining = 0.0
 	zeroday_window_remaining = 0.0
-	zeroday_button.visible = false
+	_set_zeroday_shown(false)
 	zeroday_spawn_timer = randf_range(ZERODAY_SPAWN_MIN, ZERODAY_SPAWN_MAX)
 	combo = 0
 	intrusion_active = false
@@ -2662,8 +2671,8 @@ func _center_of(control: Control) -> Vector2:
 # ---------------------------------------------------------------------------
 
 func _update_display() -> void:
-	data_label.text = "%d o" % data
-	prod_label.text = "%.1f o/s" % production_per_second()
+	data_label.text = "%s o" % _fmt_short(data)
+	prod_label.text = "%s o/s" % _fmt_short(production_per_second())
 	fragment_label.text = "%d" % fragments
 	# Horloge de la barre de statut (esthétique DOS).
 	var t := Time.get_time_dict_from_system()
@@ -2695,13 +2704,25 @@ func _update_display() -> void:
 	prestige_button.disabled = pending < 1
 
 	# --- Section opérations à risque ---
-	# Barre + libellé de cooldown.
-	cooldown_bar.value = OP_COOLDOWN - op_cooldown_remaining
+	# Le cooldown se lit directement SUR le bouton, façon jauge : fond gris (jauge vide),
+	# la couche cyan (OpFill) le remplit de gauche à droite, et le libellé OpLabel affiche
+	# le décompte par-dessus. Une fois rechargé, jauge + libellé masqués, bouton cliquable.
 	if op_cooldown_remaining > 0.0:
+		var recharge_txt := "Rechargement... %d s" % int(ceil(op_cooldown_remaining))
 		op_button.disabled = true
-		op_button.text = "Rechargement... %d s" % int(ceil(op_cooldown_remaining))
+		# Texte gardé (mais invisible via font désactivé transparente) UNIQUEMENT pour conserver
+		# la hauteur du bouton : un bouton vide se réduirait à ses marges. Le décompte lisible
+		# est affiché par OpLabel, par-dessus la jauge.
+		op_button.text = recharge_txt
+		var ratio: float = clampf((OP_COOLDOWN - op_cooldown_remaining) / OP_COOLDOWN, 0.0, 1.0)
+		op_fill.visible = true
+		op_fill.offset_right = op_button.size.x * ratio
+		op_label.visible = true
+		op_label.text = recharge_txt
 	else:
 		op_button.disabled = false
+		op_fill.visible = false
+		op_label.visible = false
 		# On montre le gain potentiel (même formule que la récompense réelle).
 		var potential := int(maxf(production_per_second() * OP_REWARD_SECONDS, click_value() * OP_MIN_REWARD_CLICKS))
 		op_button.text = "PIRATER LA CIBLE : +%d o  (%d%% de réussite)" % [potential, int(OP_SUCCESS_CHANCE * 100)]
@@ -2751,7 +2772,7 @@ func _update_display() -> void:
 	for i in generators.size():
 		var gen: Dictionary = generators[i]
 		var cost := cost_of(gen)
-		gen_rows[i].refresh(gen.name, gen.count, gen.production, cost, data >= cost)
+		gen_rows[i].refresh(gen.name, gen.count, _fmt_short(gen.production), _fmt_short(cost), data >= cost)
 
 	for i in unlocks.size():
 		_refresh_unlock_row(i)

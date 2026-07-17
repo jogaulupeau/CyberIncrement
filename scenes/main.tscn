@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://b0ao5i3lv81au"]
+[gd_scene load_steps=15 format=3 uid="uid://b0ao5i3lv81au"]
 
 [ext_resource type="Script" uid="uid://do7n57ox54jv7" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Theme" uid="uid://bip144fg1xtdx" path="res://theme/cyber_theme.tres" id="2_theme"]
@@ -26,6 +26,21 @@ border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0, 0, 0, 1)
+
+[sub_resource type="StyleBoxFlat" id="op_disabled"]
+content_margin_left = 14.0
+content_margin_top = 6.0
+content_margin_right = 14.0
+content_margin_bottom = 6.0
+bg_color = Color(0.55, 0.55, 0.55, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 1)
+shadow_color = Color(0, 0, 0, 1)
+shadow_size = 1
+shadow_offset = Vector2(4, 4)
 
 [sub_resource type="StyleBoxFlat" id="trace_frame"]
 bg_color = Color(0.769, 0.769, 0.769, 1)
@@ -518,13 +533,32 @@ autowrap_mode = 2
 [node name="OpButton" type="Button" parent="HUD/Root/Body/Left/OpsPanel/OVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_colors/font_disabled_color = Color(0, 0, 0, 0)
+theme_override_styles/disabled = SubResource("op_disabled")
 text = "LANCER UNE OPÉRATION"
 
-[node name="CooldownBar" type="ProgressBar" parent="HUD/Root/Body/Left/OpsPanel/OVBox"]
+[node name="OpFill" type="ColorRect" parent="HUD/Root/Body/Left/OpsPanel/OVBox/OpButton"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 10)
-layout_mode = 2
-show_percentage = false
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0.667, 0.667, 1)
+
+[node name="OpLabel" type="Label" parent="HUD/Root/Body/Left/OpsPanel/OVBox/OpButton"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+text = "Rechargement..."
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="TraceLabel" type="Label" parent="HUD/Root/Body/Left/OpsPanel/OVBox"]
 unique_name_in_owner = true
@@ -573,9 +607,10 @@ vertical_alignment = 1
 
 [node name="ZeroDayButton" type="Button" parent="HUD/Root/Body/Left/OpsPanel/OVBox"]
 unique_name_in_owner = true
-visible = false
+modulate = Color(1, 1, 1, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.541, 0, 0.541, 1)
+disabled = true
 text = "EXPLOITER LA FAILLE (0 s)"
 
 [node name="EventStatus" type="Label" parent="HUD/Root/Body/Left/OpsPanel/OVBox"]
