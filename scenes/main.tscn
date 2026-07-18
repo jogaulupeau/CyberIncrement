@@ -654,39 +654,117 @@ size_flags_vertical = 3
 theme_override_styles/panel = SubResource("tab_panel")
 current_tab = 0
 
-[node name="GeneratorsTab" type="ScrollContainer" parent="HUD/Root/Body/Right/Tabs"]
+[node name="GeneratorsTab" type="Control" parent="HUD/Root/Body/Right/Tabs"]
 layout_mode = 2
-horizontal_scroll_mode = 0
-vertical_scroll_mode = 2
 metadata/_tab_index = 0
 
-[node name="GenContainer" type="VBoxContainer" parent="HUD/Root/Body/Right/Tabs/GeneratorsTab"]
+[node name="AsciiBg" type="Label" parent="HUD/Root/Body/Right/Tabs/GeneratorsTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.5, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 48
+text = ".-------------.
+|:::::::::::::|
+| [] [] [] () |
+|:::::::::::::|
+| [] [] [] () |
+|:::::::::::::|
+'-------------'"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="HUD/Root/Body/Right/Tabs/GeneratorsTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 2
+
+[node name="GenContainer" type="VBoxContainer" parent="HUD/Root/Body/Right/Tabs/GeneratorsTab/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="UpgradesTab" type="ScrollContainer" parent="HUD/Root/Body/Right/Tabs"]
+[node name="UpgradesTab" type="Control" parent="HUD/Root/Body/Right/Tabs"]
 visible = false
 layout_mode = 2
-horizontal_scroll_mode = 0
-vertical_scroll_mode = 2
 metadata/_tab_index = 1
 
-[node name="ShopContainer" type="VBoxContainer" parent="HUD/Root/Body/Right/Tabs/UpgradesTab"]
+[node name="AsciiBg" type="Label" parent="HUD/Root/Body/Right/Tabs/UpgradesTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.5, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 48
+text = "_|_|_|_|_|_
+|  _____  |
+|-| CPU |-|
+|-|_____|-|
+|_________|
+|_|_|_|_|_|"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="HUD/Root/Body/Right/Tabs/UpgradesTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 2
+
+[node name="ShopContainer" type="VBoxContainer" parent="HUD/Root/Body/Right/Tabs/UpgradesTab/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
-[node name="ProgramsTab" type="ScrollContainer" parent="HUD/Root/Body/Right/Tabs"]
+[node name="ProgramsTab" type="Control" parent="HUD/Root/Body/Right/Tabs"]
 visible = false
 layout_mode = 2
-horizontal_scroll_mode = 0
-vertical_scroll_mode = 2
 metadata/_tab_index = 2
 
-[node name="DaemonContainer" type="VBoxContainer" parent="HUD/Root/Body/Right/Tabs/ProgramsTab"]
+[node name="AsciiBg" type="Label" parent="HUD/Root/Body/Right/Tabs/ProgramsTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.5, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 48
+text = ".---------.
+| (o) (o) |
+|    T    |
+|  '---'  |
+'---------'"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="HUD/Root/Body/Right/Tabs/ProgramsTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 2
+
+[node name="DaemonContainer" type="VBoxContainer" parent="HUD/Root/Body/Right/Tabs/ProgramsTab/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
