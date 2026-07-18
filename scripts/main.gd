@@ -15,7 +15,7 @@ const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 7                 # +items +daemons +network +objectif +déblocages
 
 # Infos de publication (affichées dans l'aide "À propos" et le footer).
-const GAME_VERSION := "0.2.1"
+const GAME_VERSION := "0.3.0"
 const GAME_AUTHOR := "Jonathan GAULUPEAU"
 const GAME_YEAR := "2026"
 const GAME_LICENSE := "Creative Commons BY-NC 4.0"
@@ -1593,7 +1593,7 @@ func _add_terminal_line(gain: float) -> void:
 
 func _seed_terminal() -> void:
 	term_lines = [
-		"[color=#3aaa3a]NEXUS OS 0.2.1 — 640K OK[/color]",
+		"[color=#3aaa3a]NEXUS OS %s — 640K OK[/color]" % GAME_VERSION,
 		"[color=#5c9c5c]system: nexus online[/color]",
 		"[color=#5c9c5c]link: tunnel chiffré établi[/color]",
 		"[color=#5c9c5c]awaiting input...[/color]",
