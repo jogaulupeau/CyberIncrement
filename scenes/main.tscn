@@ -675,14 +675,18 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(0.5, 0.6, 0.6, 1)
-theme_override_font_sizes/font_size = 48
-text = ".-------------.
-|:::::::::::::|
-| [] [] [] () |
-|:::::::::::::|
-| [] [] [] () |
-|:::::::::::::|
-'-------------'"
+theme_override_font_sizes/font_size = 24
+text = ".===================.
+|   SERVER  FARM    |
+|===================|
+| [##]  [##]   o  O |
+| [##]  [##]   o  O |
+|-------------------|
+| [==]  [==]   :  : |
+| [==]  [==]   :  : |
+|-------------------|
+| >_ nexus.core.db  |
+'==================='"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -715,13 +719,18 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(0.5, 0.6, 0.6, 1)
-theme_override_font_sizes/font_size = 48
-text = "_|_|_|_|_|_
-|  _____  |
-|-| CPU |-|
-|-|_____|-|
-|_________|
-|_|_|_|_|_|"
+theme_override_font_sizes/font_size = 24
+text = ".===================.
+|   MICROCHIP  v2   |
+|===================|
+|    _ _ _ _ _ _    |
+|   | | | | | | |   |
+| .-+-+-+-+-+-+-+-. |
+| |   O V R C L   | |
+| |    C P U -X   | |
+| '-+-+-+-+-+-+-+-' |
+|   | | | | | | |   |
+'==================='"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -754,12 +763,17 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(0.5, 0.6, 0.6, 1)
-theme_override_font_sizes/font_size = 48
-text = ".---------.
-| (o) (o) |
-|    T    |
-|  '---'  |
-'---------'"
+theme_override_font_sizes/font_size = 24
+text = ".===================.
+| daemon @ nexus  _ |
+|===================|
+| > run autopwn.sh  |
+| [ok]  pid 1337    |
+| > ghost --purge   |
+| [ok]  trace wiped |
+| > overclock  x3   |
+| [##########] done |
+'==================='"
 horizontal_alignment = 1
 vertical_alignment = 1
 
