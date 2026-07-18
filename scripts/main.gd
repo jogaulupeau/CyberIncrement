@@ -20,6 +20,12 @@ const GAME_AUTHOR := "Jonathan GAULUPEAU"
 const GAME_YEAR := "2026"
 const GAME_LICENSE := "Creative Commons BY-NC 4.0"
 
+# Vérification de mise à jour : on interroge l'API des TAGS du dépôt GitHub (fonctionne même
+# sans "Release" publiée) et on compare au plus haut tag. Aucune donnée envoyée (simple GET
+# public), silencieux en cas d'échec.
+const GITHUB_TAGS_URL := "https://api.github.com/repos/jogaulupeau/CyberIncrement/tags"
+const GITHUB_RELEASES_URL := "github.com/jogaulupeau/CyberIncrement/releases"
+
 const FRAGMENT_BONUS := 0.10
 const PRESTIGE_DIV := 10000.0
 
@@ -514,12 +520,66 @@ func _ready() -> void:
 	_apply_gating()
 	_setup_audio()
 	_update_display()
+	_check_for_updates()
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		save_game()
 		get_tree().quit()
+
+
+# ---------------------------------------------------------------------------
+# VÉRIFICATION DE MISE À JOUR (GitHub) — asynchrone, non bloquant, silencieux si échec
+# ---------------------------------------------------------------------------
+
+func _check_for_updates() -> void:
+	var http := HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(_on_update_check_completed.bind(http))
+	# User-Agent OBLIGATOIRE pour l'API GitHub (sinon 403).
+	var headers := ["User-Agent: CyberIncrement", "Accept: application/vnd.github+json"]
+	if http.request(GITHUB_TAGS_URL, headers) != OK:
+		http.queue_free()          # échec immédiat (pas de réseau) : on abandonne en silence
+
+
+func _on_update_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, http: HTTPRequest) -> void:
+	http.queue_free()
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		return                     # hors-ligne / API indispo / rate-limit : silencieux
+	var json = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(json) != TYPE_ARRAY:
+		return
+	# On garde le plus haut tag (l'ordre renvoyé par l'API n'est pas garanti sémantique).
+	var current := _parse_version(GAME_VERSION)
+	var best := current
+	var best_str := ""
+	for entry in json:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var v := _parse_version(str(entry.get("name", "")))
+		if _version_greater(v, best):
+			best = v
+			best_str = str(entry.get("name", ""))
+	if best_str != "" and _version_greater(best, current):
+		_show_toast("MISE À JOUR DISPONIBLE", "Version %s (tu as %s) — %s" % [best_str, GAME_VERSION, GITHUB_RELEASES_URL], TOAST_SYS, 10.0)
+		_set_status("Nouvelle version %s disponible sur GitHub." % best_str)
+
+
+# "0.3.0" ou "v0.3.0" -> [major, minor, patch] (composants non numériques -> 0).
+func _parse_version(s: String) -> Array:
+	var parts := s.strip_edges().lstrip("v").split(".")
+	var out := [0, 0, 0]
+	for i in mini(3, parts.size()):
+		out[i] = int(parts[i].to_int())
+	return out
+
+
+func _version_greater(a: Array, b: Array) -> bool:
+	for i in 3:
+		if a[i] != b[i]:
+			return a[i] > b[i]
+	return false
 
 
 func _build_generator_rows() -> void:
