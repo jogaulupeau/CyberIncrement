@@ -46,6 +46,6 @@ func _on_buy_pressed() -> void:
 func refresh(gen_name: String, count: int, bonus_str: String, cost_str: String, affordable: bool) -> void:
 	name_label.text = gen_name
 	mult_label.text = "x%d" % count
-	bonus_label.text = "+%s o/s" % bonus_str
+	bonus_label.text = "Augmente la production de +%s o/s" % bonus_str
 	buy_button.text = "Acheter — %s o" % cost_str
 	buy_button.disabled = not affordable
