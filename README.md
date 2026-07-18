@@ -200,3 +200,4 @@ Godot_v4.4.1-stable_win64_console.exe --headless --path . --export-release "Wind
 - **Police** : Share Tech Mono — **SIL OFL 1.1** (`fonts/OFL.txt`).
 - **Sons & musique** : **synthétisés** dans le projet (aucun asset externe).
 - **Shader de fond & icône du jeu** : faits maison.
+
