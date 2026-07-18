@@ -24,7 +24,7 @@ const GAME_LICENSE := "Creative Commons BY-NC 4.0"
 # sans "Release" publiée) et on compare au plus haut tag. Aucune donnée envoyée (simple GET
 # public), silencieux en cas d'échec.
 const GITHUB_TAGS_URL := "https://api.github.com/repos/jogaulupeau/CyberIncrement/tags"
-const GITHUB_RELEASES_URL := "github.com/jogaulupeau/CyberIncrement/releases"
+const GITHUB_RELEASES_URL := "https://github.com/jogaulupeau/CyberIncrement/releases"
 
 const FRAGMENT_BONUS := 0.10
 const PRESTIGE_DIV := 10000.0
@@ -310,7 +310,7 @@ var help_topics: Array[Dictionary] = [
 		"text": "" },
 	{ "id": "about", "label": "À propos", "gate": "",
 		"title": "À propos",
-		"text": "Cyber Increment — version %s\n\nAuteur : %s\n© %s %s\nLicence : %s\n\nCe jeu est distribué sous licence Creative Commons Attribution - Pas d'Utilisation Commerciale 4.0 (CC BY-NC 4.0) : tu peux le partager et le modifier à condition d'en créditer l'auteur et de ne pas en faire un usage commercial.\n\nMoteur : Godot Engine 4.4.1. Icônes : game-icons.net (CC BY 3.0). Police : VT323 (SIL OFL)." % [GAME_VERSION, GAME_AUTHOR, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE] },
+		"text": "Cyber Increment — version %s\n\nAuteur : %s\n© %s %s\nLicence : %s\n\nCe jeu est distribué sous licence Creative Commons Attribution - Pas d'Utilisation Commerciale 4.0 (CC BY-NC 4.0) : tu peux le partager et le modifier à condition d'en créditer l'auteur et de ne pas en faire un usage commercial.\n\nDernières versions & téléchargement : [url=%s][color=#000080]Page des releases GitHub[/color][/url]\n\nMoteur : Godot Engine 4.4.1. Icônes : game-icons.net (CC BY 3.0). Police : VT323 (SIL OFL)." % [GAME_VERSION, GAME_AUTHOR, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE, GITHUB_RELEASES_URL] },
 ]
 var help_buttons: Array[Button] = []
 
@@ -470,6 +470,7 @@ func _ready() -> void:
 	_setup_menu_item(reset_button, "[color=#aa0000]R[/color]éinitialiser", "[color=#ffffff]Réinitialiser[/color]", _on_reset_pressed)
 	_setup_menu_item(stats_button, "S[color=#aa0000]t[/color]ats", "[color=#ffffff]Stats[/color]", _open_stats)
 	help_close_button.pressed.connect(_close_help)
+	help_text.meta_clicked.connect(_on_help_meta_clicked)
 	mute_button.pressed.connect(_on_mute_pressed)
 	_build_help_topics()
 	tabs.set_tab_title(0, "Générateurs")
@@ -898,6 +899,14 @@ func _close_help() -> void:
 	var tw := create_tween()
 	tw.tween_property(help_overlay, "modulate:a", 0.0, 0.2)
 	tw.tween_callback(func() -> void: help_overlay.visible = false)
+
+
+# Clic sur un lien [url] de l'aide : ouvre l'URL dans le navigateur. Garde de sécurité :
+# on n'ouvre QUE des URL http/https (les liens sont codés en dur dans nos propres textes d'aide).
+func _on_help_meta_clicked(meta: Variant) -> void:
+	var url := str(meta)
+	if url.begins_with("https://") or url.begins_with("http://"):
+		OS.shell_open(url)
 
 
 # ---------------------------------------------------------------------------
