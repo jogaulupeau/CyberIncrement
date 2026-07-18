@@ -252,8 +252,15 @@ var _music_player: AudioStreamPlayer
 var muted: bool = false
 var sfx_volume: float = 0.8            # volume des effets (0..1), réglé par le slider
 
-# Déblocage progressif des mécaniques (onboarding).
-var unlocked := { "augment": false, "daemons": false, "operations": false, "network": false }
+# Déblocage progressif des mécaniques (onboarding). Booléens TYPÉS (une faute de frappe sur
+# un accès direct devient une erreur de compilation, au lieu d'un null silencieux). Les usages
+# DYNAMIQUES par nom (déblocage data-driven, gate d'aide, sauvegarde) passent par les accesseurs
+# _is_unlocked / _set_unlocked. UNLOCK_FEATURES pilote les boucles (save/load/reset).
+const UNLOCK_FEATURES := ["augment", "daemons", "operations", "network"]
+var unlock_augment: bool = false
+var unlock_daemons: bool = false
+var unlock_operations: bool = false
+var unlock_network: bool = false
 # Entrées "mystère" dans la boutique : coût visible, nom masqué tant que non acheté.
 # reveal = Fragments cumulés pour que l'entrée APPARAISSE ; cost = coût du déblocage.
 var unlocks: Array[Dictionary] = [
@@ -263,7 +270,7 @@ var unlocks: Array[Dictionary] = [
 ]
 var unlock_rows: Array[ItemRow] = []
 
-# Aide (P3). gate = "" -> toujours ; sinon clé de `unlocked` requise pour l'afficher.
+# Aide (P3). gate = "" -> toujours ; sinon nom de mécanique (voir _is_unlocked) requis pour l'afficher.
 var help_topics: Array[Dictionary] = [
 	{ "id": "terminal", "label": "Terminal", "gate": "",
 		"title": "Le terminal (frappe)",
@@ -463,6 +470,9 @@ func _ready() -> void:
 	tabs.set_tab_title(1, "Augmentations")
 	tabs.set_tab_title(2, "Programmes")
 	tabs.set_tab_title(3, "Réseau")
+	# Rafraîchit immédiatement l'onglet qu'on vient d'ouvrir (les lignes ne sont mises à jour
+	# que pour l'onglet affiché ; sans ça, un frame de contenu périmé pourrait apparaître).
+	tabs.tab_changed.connect(func(_t: int) -> void: _update_display())
 	about_label.text = "v%s · © %s %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR]
 	title_ver.text = "v%s" % GAME_VERSION
 	about_label.tooltip_text = "Cyber Increment v%s\n© %s %s\nLicence : %s" % [GAME_VERSION, GAME_YEAR, GAME_AUTHOR, GAME_LICENSE]
@@ -547,20 +557,37 @@ func _category_color(category: String) -> Color:
 # DÉBLOCAGE PROGRESSIF (onboarding)
 # ---------------------------------------------------------------------------
 
+# Accès par nom (pour les usages dynamiques : déblocage data-driven, gate d'aide, save/load).
+func _is_unlocked(feature: String) -> bool:
+	match feature:
+		"augment":    return unlock_augment
+		"daemons":    return unlock_daemons
+		"operations": return unlock_operations
+		"network":    return unlock_network
+	return false
+
+
+func _set_unlocked(feature: String, value: bool) -> void:
+	match feature:
+		"augment":    unlock_augment = value
+		"daemons":    unlock_daemons = value
+		"operations": unlock_operations = value
+		"network":    unlock_network = value
+
+
 # Applique la visibilité des mécaniques selon l'état de déblocage.
 func _apply_gating() -> void:
-	tabs.set_tab_hidden(1, not unlocked.augment)
-	tabs.set_tab_hidden(2, not unlocked.daemons)
-	tabs.set_tab_hidden(3, not unlocked.network)
-	daemons_panel.visible = unlocked.daemons
-	var ops: bool = unlocked.operations
-	op_button.visible = ops
-	ops_title.visible = ops
-	ops_desc.visible = ops
+	tabs.set_tab_hidden(1, not unlock_augment)
+	tabs.set_tab_hidden(2, not unlock_daemons)
+	tabs.set_tab_hidden(3, not unlock_network)
+	daemons_panel.visible = unlock_daemons
+	op_button.visible = unlock_operations
+	ops_title.visible = unlock_operations
+	ops_desc.visible = unlock_operations
 
 
 func _unlock_feature(feature: String, announce_name: String, help: String) -> void:
-	unlocked[feature] = true
+	_set_unlocked(feature, true)
 	_apply_gating()
 	_play_sfx("unlock")
 	_show_toast("DÉBLOQUÉ : %s" % announce_name, help, TOAST_SYS, 5.0)
@@ -761,7 +788,7 @@ func _open_help(preferred_id: String = "") -> void:
 	var preferred := -1
 	for i in help_topics.size():
 		var gate: String = help_topics[i].gate
-		var vis: bool = gate == "" or bool(unlocked.get(gate, false))
+		var vis: bool = gate == "" or _is_unlocked(gate)
 		help_buttons[i].visible = vis
 		if vis and first < 0:
 			first = i
@@ -1070,7 +1097,7 @@ func _update_timers(delta: float) -> void:
 			d.active_remaining = maxf(0.0, d.active_remaining - delta)
 
 	# Événements aléatoires (une fois le jeu un peu avancé : après le 1er prestige).
-	if unlocked.augment:
+	if unlock_augment:
 		if event_active:
 			event_timer -= delta
 			if event_timer <= 0.0:
@@ -1090,7 +1117,7 @@ func _update_timers(delta: float) -> void:
 	elif not event_active:
 		# Symétrique : on ne lance pas de boss pendant un événement (timer gelé aussi).
 		boss_spawn_timer -= delta
-		if boss_spawn_timer <= 0.0 and unlocked.operations:
+		if boss_spawn_timer <= 0.0 and unlock_operations:
 			_start_boss()
 
 	# Malus "TRACÉ" et buff "faille" : on décompte leur durée.
@@ -1115,7 +1142,7 @@ func _update_timers(delta: float) -> void:
 	else:
 		# Aucune faille : on attend la prochaine apparition (si Opérations débloquées).
 		zeroday_spawn_timer -= delta
-		if zeroday_spawn_timer <= 0.0 and unlocked.operations:
+		if zeroday_spawn_timer <= 0.0 and unlock_operations:
 			_spawn_zeroday()
 
 
@@ -1634,6 +1661,7 @@ func _start_intrusion() -> void:
 	current_command = ESCAPE_COMMANDS[randi() % ESCAPE_COMMANDS.size()]  # tirée au hasard
 	typed_len = 0
 	current_is_rare = false
+	final_command_active = false        # l'intrusion prime : on n'est plus sur la commande d'éveil
 	combo = 0
 	_flash(FX_ALERT, 0.45)
 	_play_sfx("alert")
@@ -2393,8 +2421,8 @@ func _do_prestige() -> void:
 	_gain_fragments(gained)
 	prestige_count += 1
 	# P1 : le tout premier Fragment révèle la boutique d'Augmentations.
-	if not unlocked.augment:
-		unlocked.augment = true
+	if not unlock_augment:
+		unlock_augment = true
 		_apply_gating()
 		_show_toast("NOUVELLE SECTION", "Augmentations débloquées — dépense tes Fragments d'IA (onglet Augmentations).", TOAST_FRAG, 5.0)
 	# Reset de la RUN uniquement. Les items (payés en fragments) restent.
@@ -2422,7 +2450,14 @@ func _do_prestige() -> void:
 # SAUVEGARDE / CHARGEMENT
 # ---------------------------------------------------------------------------
 
+# Passe à true si on détecte au chargement une sauvegarde d'une build PLUS RÉCENTE : on cesse
+# alors d'écrire pour ne pas écraser (et corrompre) cette sauvegarde avec notre état par défaut.
+var _save_blocked: bool = false
+
+
 func save_game() -> void:
+	if _save_blocked:
+		return
 	var counts := {}
 	for gen in generators:
 		counts[gen.name] = gen.count
@@ -2436,6 +2471,9 @@ func save_game() -> void:
 	for i in network_nodes.size():
 		if network_nodes[i].owned:
 			network_owned.append(i)
+	var unlocked_state := {}
+	for f in UNLOCK_FEATURES:
+		unlocked_state[f] = _is_unlocked(f)
 
 	var payload := {
 		"version": SAVE_VERSION,
@@ -2455,7 +2493,7 @@ func save_game() -> void:
 		"total_commands_typed": total_commands_typed,
 		"total_rare_typed": total_rare_typed,
 		"best_run_earned": best_run_earned,
-		"unlocked": unlocked,
+		"unlocked": unlocked_state,
 		"unlocks_owned": _owned_unlock_ids(),
 		"muted": muted,
 		"sfx_volume": sfx_volume,
@@ -2484,6 +2522,16 @@ func load_game() -> void:
 		_set_status("Sauvegarde illisible, ignorée.")
 		return
 
+	# Garde de compatibilité : une sauvegarde écrite par une build PLUS RÉCENTE (version
+	# supérieure) peut contenir des champs/formats qu'on ne sait pas interpréter. On ne la charge
+	# pas ET on bloque l'écriture pour ne pas l'écraser (voir _save_blocked). Les versions
+	# antérieures ou égales restent gérées par les valeurs par défaut de chaque .get().
+	var saved_version := int(payload.get("version", 0))
+	if saved_version > SAVE_VERSION:
+		_save_blocked = true
+		_set_status("Sauvegarde d'une version plus récente (v%d) — non chargée (protégée)." % saved_version)
+		return
+
 	data = float(payload.get("data", 0.0))
 	run_earned = float(payload.get("run_earned", 0.0))
 	fragments = int(payload.get("fragments", 0))
@@ -2500,15 +2548,15 @@ func load_game() -> void:
 
 	if payload.has("unlocked"):
 		var saved_unlocked: Dictionary = payload.get("unlocked", {})
-		for k in unlocked:
-			unlocked[k] = bool(saved_unlocked.get(k, false))
+		for f in UNLOCK_FEATURES:
+			_set_unlocked(f, bool(saved_unlocked.get(f, false)))
 		var owned_ids: Array = payload.get("unlocks_owned", [])
 		for u in unlocks:
 			u.owned = u.id in owned_ids
 	else:
 		# Sauvegarde d'avant le système de déblocage : on débloque tout (pas de régression).
-		for k in unlocked:
-			unlocked[k] = true
+		for f in UNLOCK_FEATURES:
+			_set_unlocked(f, true)
 		for u in unlocks:
 			u.owned = true
 
@@ -2575,8 +2623,8 @@ func _do_reset() -> void:
 	total_commands_typed = 0
 	total_rare_typed = 0
 	best_run_earned = 0.0
-	for k in unlocked:
-		unlocked[k] = false
+	for f in UNLOCK_FEATURES:
+		_set_unlocked(f, false)
 	for u in unlocks:
 		u.owned = false
 	event_active = false
@@ -2670,16 +2718,36 @@ func _center_of(control: Control) -> Vector2:
 # AFFICHAGE
 # ---------------------------------------------------------------------------
 
+# Rafraîchissement de l'UI, appelé chaque frame (et à la demande après une action).
+# Simple ORCHESTRATEUR : chaque sous-fonction est responsable d'une zone de l'écran.
+# Les zones toujours visibles sont mises à jour à chaque appel ; le contenu des onglets
+# (lignes, carte réseau) n'est rafraîchi que pour l'onglet affiché (voir _update_visible_tab).
 func _update_display() -> void:
+	_update_resource_labels()
+	_update_typing_ui()
+	_update_prestige_ui()
+	_update_ops_ui()
+	_update_trace_bar()
+	# Bouton de faille (compte à rebours pendant qu'il est visible).
+	if zeroday_window_remaining > 0.0:
+		zeroday_button.text = "EXPLOITER LA FAILLE (%d s)" % int(ceil(zeroday_window_remaining))
+	_update_effects_status()
+	_update_boss_ui()
+	_update_daemon_buttons()
+	_update_visible_tab()
+
+
+# Bande ressources (haut) + horloge de la barre de statut.
+func _update_resource_labels() -> void:
 	data_label.text = "%s o" % _fmt_short(data)
 	prod_label.text = "%s o/s" % _fmt_short(production_per_second())
 	fragment_label.text = "%d" % fragments
-	# Horloge de la barre de statut (esthétique DOS).
 	var t := Time.get_time_dict_from_system()
 	clock_label.text = "%02d:%02d:%02d" % [t.hour, t.minute, t.second]
-	_update_typing_ui()
 
-	# Ligne de prestige : bonus actuel, accumulé, et seuil du prochain fragment.
+
+# Ligne de prestige (bonus / accumulé / seuil), libellé d'objectif, bouton Compiler.
+func _update_prestige_ui() -> void:
 	var pending := pending_fragments()
 	var next_threshold := fragments_threshold(pending + 1)
 	var remaining := maxf(0.0, next_threshold - run_earned)
@@ -2703,16 +2771,16 @@ func _update_display() -> void:
 		prestige_button.text = "COMPILER L'IA — accumule encore %d o" % int(remaining)
 	prestige_button.disabled = pending < 1
 
-	# --- Section opérations à risque ---
-	# Le cooldown se lit directement SUR le bouton, façon jauge : fond gris (jauge vide),
-	# la couche cyan (OpFill) le remplit de gauche à droite, et le libellé OpLabel affiche
-	# le décompte par-dessus. Une fois rechargé, jauge + libellé masqués, bouton cliquable.
+
+# Bouton PIRATER : le cooldown se lit directement dessus, façon jauge (fond gris = vide,
+# couche cyan OpFill qui se remplit de gauche à droite, décompte OpLabel par-dessus). Une
+# fois rechargé, jauge + libellé masqués et le bouton redevient cliquable.
+func _update_ops_ui() -> void:
 	if op_cooldown_remaining > 0.0:
 		var recharge_txt := "Rechargement... %d s" % int(ceil(op_cooldown_remaining))
 		op_button.disabled = true
 		# Texte gardé (mais invisible via font désactivé transparente) UNIQUEMENT pour conserver
-		# la hauteur du bouton : un bouton vide se réduirait à ses marges. Le décompte lisible
-		# est affiché par OpLabel, par-dessus la jauge.
+		# la hauteur du bouton : un bouton vide se réduirait à ses marges.
 		op_button.text = recharge_txt
 		var ratio: float = clampf((OP_COOLDOWN - op_cooldown_remaining) / OP_COOLDOWN, 0.0, 1.0)
 		op_fill.visible = true
@@ -2727,14 +2795,9 @@ func _update_display() -> void:
 		var potential := int(maxf(production_per_second() * OP_REWARD_SECONDS, click_value() * OP_MIN_REWARD_CLICKS))
 		op_button.text = "PIRATER LA CIBLE : +%d o  (%d%% de réussite)" % [potential, int(OP_SUCCESS_CHANCE * 100)]
 
-	# Jauge de traçage (barre à ticks style FreeDOS, couleur selon la menace).
-	_update_trace_bar()
 
-	# Bouton de faille (compte à rebours pendant qu'il est visible).
-	if zeroday_window_remaining > 0.0:
-		zeroday_button.text = "EXPLOITER LA FAILLE (%d s)" % int(ceil(zeroday_window_remaining))
-
-	# Ligne d'état des effets temporaires actifs.
+# Ligne d'état des effets temporaires actifs (faille, surrégime, frappe, tracé, événement).
+func _update_effects_status() -> void:
 	var status_txt := ""
 	if zeroday_buff_remaining > 0.0:
 		status_txt += "FAILLE ACTIVE : prod x%d (%d s)" % [int(ZERODAY_MULT), int(ceil(zeroday_buff_remaining))]
@@ -2756,29 +2819,18 @@ func _update_display() -> void:
 		status_txt += "%s (%d s)" % ["INSTABILITÉ" if event_id == "instabilite" else "SURCHARGE", int(ceil(event_timer))]
 	event_status.text = status_txt if status_txt != "" else " "
 
-	_update_network()
-	# Recadrage auto dès que la vue a une taille réelle (après la 1re mise en page).
-	if not _network_fitted and network_view.size.x > 1.0:
-		_fit_network_view()
-		_network_fitted = true
 
-	# Barre de vie du firewall pendant le combat.
+# Panneau de vie du firewall (visible seulement pendant un combat).
+func _update_boss_ui() -> void:
 	boss_panel.visible = boss_active
 	if boss_active:
 		boss_hp_bar.max_value = boss_max_hp
 		boss_hp_bar.value = boss_hp
 		boss_info.text = "PV %d/%d   —   %d s" % [int(ceil(boss_hp)), int(boss_max_hp), int(ceil(boss_timer))]
 
-	for i in generators.size():
-		var gen: Dictionary = generators[i]
-		var cost := cost_of(gen)
-		gen_rows[i].refresh(gen.name, gen.count, _fmt_short(gen.production), _fmt_short(cost), data >= cost)
 
-	for i in unlocks.size():
-		_refresh_unlock_row(i)
-	for i in items.size():
-		_refresh_item_row(i)
-
+# Boutons daemons de la barre de gauche (TOUJOURS visibles) : nom + état (actif / recharge).
+func _update_daemon_buttons() -> void:
 	for i in daemons.size():
 		var d: Dictionary = daemons[i]
 		var btn := daemon_buttons[i]
@@ -2800,7 +2852,32 @@ func _update_display() -> void:
 				else:
 					btn.text = d.name
 					btn.disabled = false
-		_refresh_daemon_row(i)
+
+
+# Rafraîchit UNIQUEMENT le contenu de l'onglet affiché (les autres seront mis à jour à leur
+# réouverture, via _process ou le signal tab_changed). Onglets : 0=Générateurs 1=Augmentations
+# 2=Programmes 3=Réseau. C'est le plus coûteux, d'où le gating sur la visibilité.
+func _update_visible_tab() -> void:
+	match tabs.current_tab:
+		0:
+			for i in generators.size():
+				var gen: Dictionary = generators[i]
+				var cost := cost_of(gen)
+				gen_rows[i].refresh(gen.name, gen.count, _fmt_short(gen.production), _fmt_short(cost), data >= cost)
+		1:
+			for i in unlocks.size():
+				_refresh_unlock_row(i)
+			for i in items.size():
+				_refresh_item_row(i)
+		2:
+			for i in daemons.size():
+				_refresh_daemon_row(i)
+		3:
+			_update_network()
+			# Recadrage auto dès que la vue a une taille réelle (après la 1re mise en page).
+			if not _network_fitted and network_view.size.x > 1.0:
+				_fit_network_view()
+				_network_fitted = true
 
 
 func _refresh_item_row(i: int) -> void:
